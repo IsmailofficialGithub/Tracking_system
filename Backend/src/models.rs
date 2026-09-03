@@ -64,3 +64,13 @@ pub struct Session {
     pub recording_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
+
+#[allow(dead_code)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Recording {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub file_path: String,
+    pub size_bytes: i64,
+    pub created_at: DateTime<Utc>,
+}

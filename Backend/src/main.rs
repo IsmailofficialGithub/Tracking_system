@@ -21,6 +21,7 @@ async fn main() {
         .route("/health", get(health_check))
         .nest("/api/admin", routes::admin::admin_routes())
         .nest("/api/employee", routes::employee::employee_routes())
+        .nest("/api/employee/recordings", routes::recordings::recordings_routes())
         .nest("/api/realtime", routes::realtime::realtime_routes())
         .with_state(state);
 
