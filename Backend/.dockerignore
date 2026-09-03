@@ -1,0 +1,7 @@
+target/
+**/*.rs.bk
+.env
+.github/
+Database/
+Frontend/
+node_modules/

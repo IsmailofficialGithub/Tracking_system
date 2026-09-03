@@ -33,3 +33,6 @@ jobs:
 
       - name: Run tests
         run: cargo test
+
+      - name: Verify Docker Build
+        run: docker build -t backend:ci .

@@ -19,10 +19,27 @@ function App() {
 
 function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout: () => void }) {
   const [isRecording, setIsRecording] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const startRecording = async () => {
     try {
+      // 1. Check In via API
+      const checkInRes = await axios.post(`${BACKEND_URL}/api/employee/check-in`, {}, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      const newSessionId = checkInRes.data.session_id;
+      setSessionId(newSessionId);
+
+      // 2. Open Real-time WebSocket connection
+      const wsUrl = BACKEND_URL.replace('http', 'ws');
+      const ws = new WebSocket(`${wsUrl}/api/realtime/ws?token=${sessionToken}`);
+      ws.onopen = () => console.log("WebSocket connected for Real-time presence.");
+      ws.onclose = () => console.log("WebSocket closed.");
+      wsRef.current = ws;
+
+      // 3. Start Screen Capture
       const sourceId = await (window as any).electronAPI.getScreenSource();
       if (!sourceId) throw new Error("Could not find screen source");
 
@@ -33,7 +50,7 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
             chromeMediaSource: 'desktop',
             chromeMediaSourceId: sourceId,
             minFrameRate: 1,
-            maxFrameRate: 2, // Ultra-low frame rate for efficiency
+            maxFrameRate: 2,
             maxWidth: 1280,
             maxHeight: 720
           }
@@ -44,9 +61,24 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = async (e) => {
-        if (e.data.size > 0) {
-          console.log("Recorded Video Chunk:", e.data.size, "bytes");
-          // Phase 5 will upload this chunk to the backend
+        if (e.data.size > 0 && newSessionId) {
+          console.log("Uploading chunk of size:", e.data.size, "bytes");
+          // 4. Upload chunk to Rust server natively
+          try {
+            await axios.post(
+              `${BACKEND_URL}/api/employee/recordings/upload/${newSessionId}`,
+              e.data,
+              {
+                headers: {
+                  'Authorization': `Bearer ${sessionToken}`,
+                  'Content-Type': 'video/webm'
+                }
+              }
+            );
+          } catch (uploadError) {
+            console.error("Failed to upload chunk", uploadError);
+            // In a production app, we would cache to disk here for retrying later.
+          }
         }
       };
 
@@ -54,17 +86,36 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
       recorder.start(120000); 
       setIsRecording(true);
     } catch (e) {
-      console.error("Screen capture failed:", e);
-      alert("Failed to start tracking. Please ensure screen permissions are granted.");
+      console.error("Shift Start Error:", e);
+      alert("Failed to start shift. Check permissions and backend connection.");
     }
   };
 
-  const stopRecording = () => {
+  const stopRecording = async () => {
+    // Stop recording engine
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
     }
+    
+    // Close Real-time socket
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
+
+    // Check Out via API
+    if (sessionId) {
+      try {
+        await axios.post(`${BACKEND_URL}/api/employee/check-out`, {}, {
+          headers: { Authorization: `Bearer ${sessionToken}` }
+        });
+      } catch (e) {
+        console.error("Failed to checkout", e);
+      }
+    }
+    
     setIsRecording(false);
+    setSessionId(null);
   };
 
   return (
