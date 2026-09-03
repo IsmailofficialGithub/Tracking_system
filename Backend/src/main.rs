@@ -5,6 +5,8 @@ mod auth;
 mod db;
 mod models;
 mod routes;
+mod services;
+mod state;
 
 #[tokio::main]
 async fn main() {
@@ -13,11 +15,14 @@ async fn main() {
 
     // Connect to database
     let pool = db::establish_connection().await;
+    let state = state::AppState::new(pool);
 
     let app = Router::new()
         .route("/health", get(health_check))
         .nest("/api/admin", routes::admin::admin_routes())
-        .with_state(pool);
+        .nest("/api/employee", routes::employee::employee_routes())
+        .nest("/api/realtime", routes::realtime::realtime_routes())
+        .with_state(state);
 
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);

@@ -4,7 +4,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use sqlx::PgPool;
+use crate::state::AppState;
 
 use crate::auth::AuthUser;
 use crate::models::{ShiftTemplate, User};
@@ -22,19 +22,19 @@ pub struct CreateShiftTemplate {
     pub timezone: String,
 }
 
-pub fn admin_routes() -> Router<PgPool> {
+pub fn admin_routes() -> Router<AppState> {
     Router::new()
         .route("/users", get(list_users))
         .route("/shift-templates", get(list_shift_templates).post(create_shift_template))
 }
 
 async fn list_users(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
     _auth: AuthUser,
 ) -> Result<Json<Vec<User>>, StatusCode> {
     // In a real app, verify _auth.0.role == "super_admin" or "manager"
     let users = sqlx::query_as::<_, User>("SELECT * FROM public.users")
-        .fetch_all(&pool)
+        .fetch_all(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -42,11 +42,11 @@ async fn list_users(
 }
 
 async fn list_shift_templates(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
     _auth: AuthUser,
 ) -> Result<Json<Vec<ShiftTemplate>>, StatusCode> {
     let templates = sqlx::query_as::<_, ShiftTemplate>("SELECT * FROM public.shift_templates")
-        .fetch_all(&pool)
+        .fetch_all(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -54,7 +54,7 @@ async fn list_shift_templates(
 }
 
 async fn create_shift_template(
-    State(pool): State<PgPool>,
+    State(state): State<AppState>,
     _auth: AuthUser,
     Json(payload): Json<CreateShiftTemplate>,
 ) -> Result<(StatusCode, Json<ShiftTemplate>), StatusCode> {
@@ -70,7 +70,7 @@ async fn create_shift_template(
     .bind(&payload.end_time)
     .bind(&payload.grace_minutes)
     .bind(&payload.timezone)
-    .fetch_one(&pool)
+    .fetch_one(&state.db)
     .await
     .map_err(|e| {
         eprintln!("DB Error: {:?}", e);

@@ -41,3 +41,26 @@ pub struct EmployeeShift {
     pub effective_to: Option<NaiveDate>,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Serialize, Deserialize, sqlx::Type, PartialEq)]
+#[sqlx(type_name = "session_status", rename_all = "snake_case")]
+pub enum SessionStatus {
+    OnTime,
+    Late,
+    Interrupted,
+    EndedEarly,
+    Completed,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct Session {
+    pub id: Uuid,
+    pub employee_id: Uuid,
+    pub shift_template_id: Uuid,
+    pub check_in_at: DateTime<Utc>,
+    pub check_out_at: Option<DateTime<Utc>>,
+    pub status: SessionStatus,
+    pub recording_id: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+}
