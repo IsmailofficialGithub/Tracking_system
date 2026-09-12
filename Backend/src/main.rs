@@ -10,6 +10,11 @@ mod state;
 
 #[tokio::main]
 async fn main() {
+    // Install default crypto provider for rustls globally to prevent ANY panics from sqlx/reqwest/etc.
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .ok(); // Ignore if already installed
+
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
 
