@@ -1,16 +1,16 @@
+use crate::auth::AuthUser;
+use crate::models::{ShiftTemplate, User};
+use crate::state::AppState;
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     routing::{delete, get, post},
-    Json, Router,
 };
-use crate::state::AppState;
-use crate::auth::AuthUser;
-use crate::models::{ShiftTemplate, User};
-use bcrypt::{hash, DEFAULT_COST};
+use bcrypt::{DEFAULT_COST, hash};
+use chrono::{NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use chrono::{NaiveTime, NaiveDate};
 
 #[derive(Deserialize)]
 pub struct CreateShiftTemplate {
@@ -65,7 +65,10 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/users", get(list_users).post(create_employee))
         .route("/users/{id}", delete(delete_user))
         // Shift Templates
-        .route("/shift-templates", get(list_shift_templates).post(create_shift_template))
+        .route(
+            "/shift-templates",
+            get(list_shift_templates).post(create_shift_template),
+        )
         .route("/shift-templates/{id}", delete(delete_shift_template))
         // Shift Assignments
         .route("/employee-shifts", post(assign_shift))
@@ -140,7 +143,7 @@ async fn list_shift_templates(
     _auth: AuthUser,
 ) -> Result<Json<Vec<ShiftTemplate>>, StatusCode> {
     let templates = sqlx::query_as::<_, ShiftTemplate>(
-        "SELECT * FROM public.shift_templates ORDER BY created_at DESC"
+        "SELECT * FROM public.shift_templates ORDER BY created_at DESC",
     )
     .fetch_all(&state.db)
     .await
@@ -196,7 +199,9 @@ async fn assign_shift(
     _auth: AuthUser,
     Json(payload): Json<AssignShiftRequest>,
 ) -> Result<StatusCode, (StatusCode, String)> {
-    let effective_from = payload.effective_from.unwrap_or_else(|| chrono::Local::now().date_naive());
+    let effective_from = payload
+        .effective_from
+        .unwrap_or_else(|| chrono::Local::now().date_naive());
 
     // Close any existing active assignment for this employee
     sqlx::query(
@@ -231,7 +236,19 @@ async fn list_sessions(
     State(state): State<AppState>,
     _auth: AuthUser,
 ) -> Result<Json<Vec<SessionWithEmployee>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, String, String, Uuid, chrono::DateTime<chrono::Utc>, Option<chrono::DateTime<chrono::Utc>>, String)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            String,
+            String,
+            Uuid,
+            chrono::DateTime<chrono::Utc>,
+            Option<chrono::DateTime<chrono::Utc>>,
+            String,
+        ),
+    >(
         r#"
         SELECT s.id, s.employee_id, u.name, u.email, s.shift_template_id,
                s.check_in_at, s.check_out_at, s.status::text
@@ -245,18 +262,32 @@ async fn list_sessions(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let sessions = rows.into_iter().map(|(id, employee_id, name, email, shift_template_id, check_in_at, check_out_at, status)| {
-        SessionWithEmployee {
-            id,
-            employee_id,
-            employee_name: name,
-            employee_email: email,
-            shift_template_id,
-            check_in_at,
-            check_out_at,
-            status,
-        }
-    }).collect();
+    let sessions = rows
+        .into_iter()
+        .map(
+            |(
+                id,
+                employee_id,
+                name,
+                email,
+                shift_template_id,
+                check_in_at,
+                check_out_at,
+                status,
+            )| {
+                SessionWithEmployee {
+                    id,
+                    employee_id,
+                    employee_name: name,
+                    employee_email: email,
+                    shift_template_id,
+                    check_in_at,
+                    check_out_at,
+                    status,
+                }
+            },
+        )
+        .collect();
 
     Ok(Json(sessions))
 }
@@ -267,7 +298,18 @@ async fn list_recordings(
     State(state): State<AppState>,
     _auth: AuthUser,
 ) -> Result<Json<Vec<RecordingWithEmployee>>, StatusCode> {
-    let rows = sqlx::query_as::<_, (Uuid, Uuid, String, String, String, i64, chrono::DateTime<chrono::Utc>)>(
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            Uuid,
+            String,
+            String,
+            String,
+            i64,
+            chrono::DateTime<chrono::Utc>,
+        ),
+    >(
         r#"
         SELECT r.id, r.session_id, u.name, u.email, r.file_path, r.size_bytes, r.created_at
         FROM public.recordings r
@@ -281,17 +323,22 @@ async fn list_recordings(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let recordings = rows.into_iter().map(|(id, session_id, name, email, file_path, size_bytes, created_at)| {
-        RecordingWithEmployee {
-            id,
-            session_id,
-            employee_name: name,
-            employee_email: email,
-            file_path,
-            size_bytes,
-            created_at,
-        }
-    }).collect();
+    let recordings = rows
+        .into_iter()
+        .map(
+            |(id, session_id, name, email, file_path, size_bytes, created_at)| {
+                RecordingWithEmployee {
+                    id,
+                    session_id,
+                    employee_name: name,
+                    employee_email: email,
+                    file_path,
+                    size_bytes,
+                    created_at,
+                }
+            },
+        )
+        .collect();
 
     Ok(Json(recordings))
 }

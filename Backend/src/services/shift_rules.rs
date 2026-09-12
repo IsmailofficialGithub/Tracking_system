@@ -10,11 +10,11 @@ pub fn evaluate_check_in_status(
 ) -> Result<SessionStatus, &'static str> {
     // Parse timezone from the shift template
     let tz = Tz::from_str(&shift.timezone).map_err(|_| "Invalid timezone in shift template")?;
-    
+
     // Convert current UTC time to employee's local time
     let local_now = now_utc.with_timezone(&tz);
     let local_time = local_now.time();
-    
+
     let shift_start = shift.start_time;
     // Calculate grace period end
     let grace_end = shift_start + chrono::Duration::minutes(shift.grace_minutes as i64);
@@ -54,7 +54,14 @@ mod tests {
         let shift = dummy_shift();
         // 8:10 AM EST is 12:10 PM UTC (or 13:10 depending on DST, but let's construct it precisely)
         let tz: Tz = "America/New_York".parse().unwrap();
-        let local_dt = tz.from_local_datetime(&NaiveDate::from_ymd_opt(2026, 9, 3).unwrap().and_hms_opt(8, 10, 0).unwrap()).unwrap();
+        let local_dt = tz
+            .from_local_datetime(
+                &NaiveDate::from_ymd_opt(2026, 9, 3)
+                    .unwrap()
+                    .and_hms_opt(8, 10, 0)
+                    .unwrap(),
+            )
+            .unwrap();
         let status = evaluate_check_in_status(local_dt.with_timezone(&Utc), &shift);
         assert_eq!(status, Ok(SessionStatus::OnTime));
     }
@@ -63,7 +70,14 @@ mod tests {
     fn test_late_check_in() {
         let shift = dummy_shift();
         let tz: Tz = "America/New_York".parse().unwrap();
-        let local_dt = tz.from_local_datetime(&NaiveDate::from_ymd_opt(2026, 9, 3).unwrap().and_hms_opt(8, 16, 0).unwrap()).unwrap();
+        let local_dt = tz
+            .from_local_datetime(
+                &NaiveDate::from_ymd_opt(2026, 9, 3)
+                    .unwrap()
+                    .and_hms_opt(8, 16, 0)
+                    .unwrap(),
+            )
+            .unwrap();
         let status = evaluate_check_in_status(local_dt.with_timezone(&Utc), &shift);
         assert_eq!(status, Ok(SessionStatus::Late));
     }
@@ -72,7 +86,14 @@ mod tests {
     fn test_too_early() {
         let shift = dummy_shift();
         let tz: Tz = "America/New_York".parse().unwrap();
-        let local_dt = tz.from_local_datetime(&NaiveDate::from_ymd_opt(2026, 9, 3).unwrap().and_hms_opt(7, 59, 0).unwrap()).unwrap();
+        let local_dt = tz
+            .from_local_datetime(
+                &NaiveDate::from_ymd_opt(2026, 9, 3)
+                    .unwrap()
+                    .and_hms_opt(7, 59, 0)
+                    .unwrap(),
+            )
+            .unwrap();
         let status = evaluate_check_in_status(local_dt.with_timezone(&Utc), &shift);
         assert_eq!(status, Err("Too early to check in"));
     }

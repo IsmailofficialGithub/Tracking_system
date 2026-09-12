@@ -1,16 +1,16 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::{get, post},
-    Json, Router,
-};
-use crate::state::AppState;
 use crate::auth::AuthUser;
 use crate::models::{Session, ShiftTemplate};
 use crate::services::shift_rules::evaluate_check_in_status;
+use crate::state::AppState;
+use axum::{
+    Json, Router,
+    extract::State,
+    http::StatusCode,
+    routing::{get, post},
+};
 use chrono::Utc;
-use uuid::Uuid;
 use serde::Serialize;
+use uuid::Uuid;
 
 #[derive(Serialize)]
 pub struct CheckInResponse {
@@ -53,7 +53,12 @@ async fn check_in(
     .fetch_optional(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or_else(|| (StatusCode::BAD_REQUEST, "No active shift assigned. Contact your admin.".to_string()))?;
+    .ok_or_else(|| {
+        (
+            StatusCode::BAD_REQUEST,
+            "No active shift assigned. Contact your admin.".to_string(),
+        )
+    })?;
 
     let now = Utc::now();
     let status = evaluate_check_in_status(now, &shift)
@@ -74,7 +79,12 @@ async fn check_in(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    Ok((StatusCode::CREATED, Json(CheckInResponse { session_id: session.id })))
+    Ok((
+        StatusCode::CREATED,
+        Json(CheckInResponse {
+            session_id: session.id,
+        }),
+    ))
 }
 
 async fn check_out(
@@ -126,7 +136,14 @@ async fn my_shift(
     .fetch_optional(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?
-    .ok_or_else(|| (StatusCode::NOT_FOUND, "No active shift assigned".to_string()))?;
+    .ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            "No active shift assigned".to_string(),
+        )
+    })?;
 
-    Ok(Json(MyShiftResponse { shift_template: shift }))
+    Ok(Json(MyShiftResponse {
+        shift_template: shift,
+    }))
 }

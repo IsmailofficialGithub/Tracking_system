@@ -1,4 +1,4 @@
-use axum::{routing::get, Router};
+use axum::{Router, routing::get};
 use std::env;
 
 mod auth;
@@ -20,7 +20,7 @@ async fn main() {
 
     // Connect to database
     let pool = db::establish_connection().await;
-    
+
     // Run migrations automatically
     println!("Running database migrations...");
     sqlx::migrate!("./migrations")
@@ -35,14 +35,17 @@ async fn main() {
         .nest("/api/auth", routes::auth_api::auth_routes())
         .nest("/api/admin", routes::admin::admin_routes())
         .nest("/api/employee", routes::employee::employee_routes())
-        .nest("/api/employee/recordings", routes::recordings::recordings_routes())
+        .nest(
+            "/api/employee/recordings",
+            routes::recordings::recordings_routes(),
+        )
         .nest("/api/realtime", routes::realtime::realtime_routes())
         .with_state(state)
         .layer(tower_http::cors::CorsLayer::permissive());
 
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
-    
+
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("Server running on http://{}", addr);
     axum::serve(listener, app).await.unwrap();
@@ -63,7 +66,12 @@ mod tests {
         let app = Router::new().route("/health", get(health_check));
 
         let response = app
-            .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
             .await
             .unwrap();
 

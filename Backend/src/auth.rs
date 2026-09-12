@@ -1,10 +1,10 @@
 use axum::{
-    extract::FromRequestParts,
-    http::{request::Parts, StatusCode},
-    response::{IntoResponse, Response},
     Json,
+    extract::FromRequestParts,
+    http::{StatusCode, request::Parts},
+    response::{IntoResponse, Response},
 };
-use jsonwebtoken::{decode, DecodingKey, Validation};
+use jsonwebtoken::{DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use std::env;
 
@@ -36,9 +36,10 @@ where
         }
 
         let token = &auth_header["Bearer ".len()..];
-        
-        let jwt_secret = env::var("JWT_SECRET").unwrap_or_else(|_| "super-secret-jwt-token-with-at-least-32-bytes-long".to_string());
-        
+
+        let jwt_secret = env::var("JWT_SECRET")
+            .unwrap_or_else(|_| "super-secret-jwt-token-with-at-least-32-bytes-long".to_string());
+
         let mut validation = Validation::default();
         validation.validate_aud = false;
 
@@ -61,7 +62,9 @@ pub enum AuthError {
 impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
-            AuthError::MissingCredentials => (StatusCode::UNAUTHORIZED, "Missing authorization header"),
+            AuthError::MissingCredentials => {
+                (StatusCode::UNAUTHORIZED, "Missing authorization header")
+            }
             AuthError::InvalidToken => (StatusCode::UNAUTHORIZED, "Invalid or expired token"),
         };
         let body = Json(serde_json::json!({

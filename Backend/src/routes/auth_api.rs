@@ -1,11 +1,6 @@
-use axum::{
-    extract::State,
-    http::StatusCode,
-    routing::post,
-    Json, Router,
-};
-use bcrypt::{hash, verify, DEFAULT_COST};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
+use bcrypt::{DEFAULT_COST, hash, verify};
+use jsonwebtoken::{EncodingKey, Header, encode};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -44,7 +39,7 @@ async fn login_handler(
 ) -> Result<Json<AuthResponse>, (StatusCode, String)> {
     // Runtime query - no compile-time DB check
     let row = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
-        "SELECT id, password_hash, role::text FROM users WHERE email = $1"
+        "SELECT id, password_hash, role::text FROM users WHERE email = $1",
     )
     .bind(&payload.email)
     .fetch_optional(&state.db)
@@ -53,17 +48,27 @@ async fn login_handler(
 
     let (id, password_hash, role) = match row {
         Some(r) => r,
-        None => return Err((StatusCode::UNAUTHORIZED, "Invalid email or password".to_string())),
+        None => {
+            return Err((
+                StatusCode::UNAUTHORIZED,
+                "Invalid email or password".to_string(),
+            ));
+        }
     };
 
     let is_valid = verify(&payload.password, &password_hash)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if !is_valid {
-        return Err((StatusCode::UNAUTHORIZED, "Invalid email or password".to_string()));
+        return Err((
+            StatusCode::UNAUTHORIZED,
+            "Invalid email or password".to_string(),
+        ));
     }
 
-    Ok(Json(AuthResponse { token: make_jwt(id, role)? }))
+    Ok(Json(AuthResponse {
+        token: make_jwt(id, role)?,
+    }))
 }
 
 async fn register_handler(
@@ -85,16 +90,23 @@ async fn register_handler(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     let (id, role) = row;
-    Ok(Json(AuthResponse { token: make_jwt(id, role)? }))
+    Ok(Json(AuthResponse {
+        token: make_jwt(id, role)?,
+    }))
 }
 
 fn make_jwt(user_id: Uuid, role: Option<String>) -> Result<String, (StatusCode, String)> {
     let exp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
-        .as_secs() as usize + 60 * 60 * 24; // 24 hours
+        .as_secs() as usize
+        + 60 * 60 * 24; // 24 hours
 
-    let claims = Claims { sub: user_id.to_string(), role, exp };
+    let claims = Claims {
+        sub: user_id.to_string(),
+        role,
+        exp,
+    };
 
     let jwt_secret = env::var("JWT_SECRET")
         .unwrap_or_else(|_| "super-secret-jwt-token-with-at-least-32-bytes-long".to_string());

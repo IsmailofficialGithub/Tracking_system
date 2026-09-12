@@ -1,10 +1,10 @@
 use axum::{
+    Router,
     body::Bytes,
     extract::{Path, Query, State},
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::IntoResponse,
     routing::{get, post},
-    Router,
 };
 use serde::Deserialize;
 use tokio::fs;
@@ -35,7 +35,7 @@ async fn upload_chunk(
 
     // 1. Verify session belongs to the user
     let session_exists = sqlx::query_scalar::<_, bool>(
-        "SELECT EXISTS(SELECT 1 FROM public.sessions WHERE id = $1 AND employee_id = $2)"
+        "SELECT EXISTS(SELECT 1 FROM public.sessions WHERE id = $1 AND employee_id = $2)",
     )
     .bind(session_id)
     .bind(employee_id)
@@ -68,7 +68,7 @@ async fn upload_chunk(
         r#"
         INSERT INTO public.recordings (session_id, file_path, size_bytes)
         VALUES ($1, $2, $3)
-        "#
+        "#,
     )
     .bind(session_id)
     .bind(&file_path)
@@ -107,12 +107,11 @@ async fn stream_recording(
     }
 
     // Look up recording path
-    let row = sqlx::query_as::<_, (String,)>(
-        "SELECT file_path FROM public.recordings WHERE id = $1"
-    )
-    .bind(recording_id)
-    .fetch_optional(&state.db)
-    .await;
+    let row =
+        sqlx::query_as::<_, (String,)>("SELECT file_path FROM public.recordings WHERE id = $1")
+            .bind(recording_id)
+            .fetch_optional(&state.db)
+            .await;
 
     let file_path = match row {
         Ok(Some((p,))) => p,
@@ -130,8 +129,5 @@ async fn stream_recording(
         return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read file").into_response();
     }
 
-    (
-        [(header::CONTENT_TYPE, "video/webm")],
-        contents,
-    ).into_response()
+    ([(header::CONTENT_TYPE, "video/webm")], contents).into_response()
 }
