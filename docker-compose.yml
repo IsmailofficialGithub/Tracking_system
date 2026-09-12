@@ -23,5 +23,13 @@ services:
       - ./uploads:/app/uploads
     restart: unless-stopped
 
+  admin:
+    build:
+      context: ./Admin
+      dockerfile: Dockerfile
+    ports:
+      - "8080:80" # Exposed on 8080 to avoid conflicts, use reverse proxy to map domain
+    restart: unless-stopped
+
 volumes:
   postgres_data:

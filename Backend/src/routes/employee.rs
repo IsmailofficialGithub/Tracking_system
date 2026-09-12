@@ -60,6 +60,28 @@ async fn check_in(
         )
     })?;
 
+    // Check if there is an ongoing session that hasn't been checked out today
+    let existing_session = sqlx::query_scalar::<_, Uuid>(
+        r#"
+        SELECT id FROM public.sessions 
+        WHERE employee_id = $1 
+          AND check_out_at IS NULL 
+          AND check_in_at >= CURRENT_DATE
+        LIMIT 1
+        "#
+    )
+    .bind(employee_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if let Some(session_id) = existing_session {
+        return Ok((
+            StatusCode::OK,
+            Json(CheckInResponse { session_id }),
+        ));
+    }
+
     let now = Utc::now();
     let status = evaluate_check_in_status(now, &shift)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
