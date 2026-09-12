@@ -23,17 +23,5 @@ services:
       - ./uploads:/app/uploads
     restart: unless-stopped
 
-  migrator:
-    build:
-      context: ./Backend
-      dockerfile: Dockerfile
-      target: builder
-    command: ["cargo","sqlx","migrate","run"]
-    env_file:
-      - .env
-    depends_on:
-      - db
-    restart: "no"
-
 volumes:
   postgres_data:

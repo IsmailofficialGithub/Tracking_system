@@ -15,6 +15,14 @@ async fn main() {
 
     // Connect to database
     let pool = db::establish_connection().await;
+    
+    // Run migrations automatically
+    println!("Running database migrations...");
+    sqlx::migrate!("./migrations")
+        .run(&pool)
+        .await
+        .expect("Failed to run database migrations");
+
     let state = state::AppState::new(pool);
 
     let app = Router::new()
