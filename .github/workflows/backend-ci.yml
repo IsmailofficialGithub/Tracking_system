@@ -46,27 +46,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: SSH Remote Deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.HOST }}
-          username: ${{ secrets.USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.PORT }}
-          script: |
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOST: ${{ secrets.HOST }}
+          USER: ${{ secrets.USER }}
+          PORT: ${{ secrets.PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          printf "%s\n" "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh -o StrictHostKeyChecking=no -p "$PORT" "$USER@$HOST" '
             set -e
-            if [ -d "$HOME/Tracking_system" ]; then
-              cd "$HOME/Tracking_system"
-            elif [ -d "$HOME/tracking_system" ]; then
-              cd "$HOME/tracking_system"
-            elif [ -d "/var/www/Tracking_system" ]; then
-              cd "/var/www/Tracking_system"
-            elif [ -d "/var/www/tracking_system" ]; then
-              cd "/var/www/tracking_system"
-            else
-              cd $(dirname $(find /root /var/www -name "docker-compose.yml" 2>/dev/null | head -n 1))
+            if [ -d "$HOME/Tracking_system" ]; then cd "$HOME/Tracking_system";
+            elif [ -d "$HOME/tracking_system" ]; then cd "$HOME/tracking_system";
+            elif [ -d "/var/www/Tracking_system" ]; then cd "/var/www/Tracking_system";
+            elif [ -d "/var/www/tracking_system" ]; then cd "/var/www/tracking_system";
             fi
             echo "Deploying latest code in directory: $(pwd)"
             git fetch --all
             git reset --hard origin/main
             docker compose up -d --build || docker-compose up -d --build
             echo "Deployment successful!"
+          '
