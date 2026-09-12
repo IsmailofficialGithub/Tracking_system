@@ -17,6 +17,7 @@ use crate::state::AppState;
 #[derive(Deserialize)]
 pub struct StreamQuery {
     pub token: Option<String>,
+    pub live: Option<bool>,
 }
 
 pub fn recordings_routes() -> Router<AppState> {
@@ -115,6 +116,7 @@ async fn stream_recording(
     let stream = stream! {
         let mut last_created_at: Option<chrono::DateTime<chrono::Utc>> = None;
         let mut session_ended = false;
+        let mut skipped_to_live = false;
         
         loop {
             // Check if the session is completed or not
@@ -131,28 +133,55 @@ async fn stream_recording(
                     session_ended = true;
                 }
             } else {
-                // If the id doesn't match a session, it might be a direct recording id.
-                // We'll treat it as ended since we just want to play that one recording.
                 session_ended = true;
             }
 
+            let is_live_mode = query.live.unwrap_or(false) && !session_ended;
+
             let rows = if let Some(last) = last_created_at {
-                sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                    "SELECT file_path, created_at FROM public.recordings WHERE (session_id = $1 OR id = $1) AND created_at > $2 ORDER BY created_at ASC"
-                )
-                .bind(recording_id)
-                .bind(last)
-                .fetch_all(&db)
-                .await
-                .unwrap_or_default()
+                if is_live_mode && !skipped_to_live {
+                    // We've yielded the first chunk (header). Now skip to the last 20 seconds.
+                    let twenty_secs_ago = chrono::Utc::now() - chrono::Duration::seconds(20);
+                    let skip_time = if twenty_secs_ago > last { twenty_secs_ago } else { last };
+                    skipped_to_live = true;
+
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT file_path, created_at FROM public.recordings WHERE (session_id = $1 OR id = $1) AND created_at > $2 ORDER BY created_at ASC"
+                    )
+                    .bind(recording_id)
+                    .bind(skip_time)
+                    .fetch_all(&db)
+                    .await
+                    .unwrap_or_default()
+                } else {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT file_path, created_at FROM public.recordings WHERE (session_id = $1 OR id = $1) AND created_at > $2 ORDER BY created_at ASC"
+                    )
+                    .bind(recording_id)
+                    .bind(last)
+                    .fetch_all(&db)
+                    .await
+                    .unwrap_or_default()
+                }
             } else {
-                sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                    "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at ASC"
-                )
-                .bind(recording_id)
-                .fetch_all(&db)
-                .await
-                .unwrap_or_default()
+                if is_live_mode {
+                    // Fetch ONLY the first chunk to get the WebM initialization header
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at ASC LIMIT 1"
+                    )
+                    .bind(recording_id)
+                    .fetch_all(&db)
+                    .await
+                    .unwrap_or_default()
+                } else {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at ASC"
+                    )
+                    .bind(recording_id)
+                    .fetch_all(&db)
+                    .await
+                    .unwrap_or_default()
+                }
             };
 
             let got_new = !rows.is_empty();

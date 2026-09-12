@@ -72,7 +72,7 @@ const Dashboard: React.FC = () => {
   const streamUrl = (session: Session) => {
     const token = localStorage.getItem('admin_token');
     const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-    return `${baseUrl}/employee/recordings/stream/${session.id}?token=${token}`;
+    return `${baseUrl}/employee/recordings/stream/${session.id}?token=${token}&live=true`;
   };
 
   return (
