@@ -25,9 +25,11 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedLiveSession, setSelectedLiveSession] = useState<Session | null>(null);
   const [sessionLogs, setSessionLogs] = useState<SessionLog[]>([]);
+  const [isVideoLoading, setIsVideoLoading] = useState(true);
 
   useEffect(() => {
     if (selectedLiveSession) {
+      setIsVideoLoading(true);
       api.get(`/admin/sessions/${selectedLiveSession.id}/logs`)
         .then(r => setSessionLogs(r.data))
         .catch(console.error);
@@ -118,12 +120,23 @@ const Dashboard: React.FC = () => {
             </div>
             
             <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden', minHeight: '360px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              {isVideoLoading && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 10, backdropFilter: 'blur(4px)' }}>
+                  <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  <p style={{ marginTop: '1rem', color: 'white', fontWeight: 500 }}>Connecting to Live Stream...</p>
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+              )}
               <video
                 key={selectedLiveSession.id}
                 controls
                 autoPlay
                 style={{ width: '100%', maxHeight: '420px', objectFit: 'contain' }}
                 src={streamUrl(selectedLiveSession)}
+                onLoadStart={() => setIsVideoLoading(true)}
+                onPlaying={() => setIsVideoLoading(false)}
+                onWaiting={() => setIsVideoLoading(true)}
+                onCanPlay={() => setIsVideoLoading(false)}
                 onError={(e) => {
                   console.log("Stream video loading or awaiting chunk...", e);
                 }}

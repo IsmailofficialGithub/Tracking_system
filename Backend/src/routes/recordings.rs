@@ -164,16 +164,26 @@ async fn stream_recording(
                             yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[..header_len]));
                         }
 
-                        let twenty_secs_ago = chrono::Utc::now() - chrono::Duration::seconds(20);
-                        if first_time < twenty_secs_ago {
-                            // Session is older than 20s. Jump to live!
-                            last_created_at = Some(twenty_secs_ago);
-                        } else {
-                            // Session just started. Yield the rest of the first chunk.
-                            if header_len < buf.len() {
-                                yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[header_len..]));
+                        let latest_chunk_time = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+                            "SELECT created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at DESC LIMIT 1"
+                        )
+                        .bind(recording_id)
+                        .fetch_optional(&db)
+                        .await
+                        .unwrap_or(None);
+
+                        if let Some(latest) = latest_chunk_time {
+                            if latest == first_time {
+                                // Session just started (only 1 chunk exists). Yield the rest of it.
+                                if header_len < buf.len() {
+                                    yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[header_len..]));
+                                }
+                                last_created_at = Some(first_time);
+                            } else {
+                                // Jump directly to the latest chunk, regardless of how old it is (handles paused sessions/drops)
+                                let skip_time = latest - chrono::Duration::milliseconds(1);
+                                last_created_at = Some(skip_time);
                             }
-                            last_created_at = Some(first_time);
                         }
                     }
                 } else {

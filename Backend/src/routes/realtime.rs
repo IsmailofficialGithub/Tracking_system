@@ -56,21 +56,35 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
     let now = Utc::now();
 
     // Execute database update directly (Auto check-out)
-    let result = sqlx::query(
+    let session_id = sqlx::query_scalar::<_, Uuid>(
         r#"
         UPDATE public.sessions 
         SET check_out_at = $1, status = 'interrupted'
         WHERE employee_id = $2 AND check_out_at IS NULL
+        RETURNING id
         "#,
     )
     .bind(now)
     .bind(employee_id)
-    .execute(&state.db)
+    .fetch_optional(&state.db)
     .await;
 
-    if let Err(e) = result {
-        eprintln!("Failed to auto check-out employee {}: {}", employee_id, e);
-    } else {
-        println!("Auto check-out successful for employee {}", employee_id);
+    match session_id {
+        Ok(Some(sid)) => {
+            println!("Auto check-out successful for employee {}", employee_id);
+            // Insert log for timeline
+            sqlx::query("INSERT INTO public.session_logs (session_id, event_type, event_time) VALUES ($1, 'check_out', $2)")
+                .bind(sid)
+                .bind(now)
+                .execute(&state.db)
+                .await
+                .ok();
+        },
+        Ok(None) => {
+            // No active session found
+        },
+        Err(e) => {
+            eprintln!("Failed to auto check-out employee {}: {}", employee_id, e);
+        }
     }
 }
