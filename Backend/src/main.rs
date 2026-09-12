@@ -37,7 +37,8 @@ async fn main() {
         .nest("/api/employee", routes::employee::employee_routes())
         .nest("/api/employee/recordings", routes::recordings::recordings_routes())
         .nest("/api/realtime", routes::realtime::realtime_routes())
-        .with_state(state);
+        .with_state(state)
+        .layer(tower_http::cors::CorsLayer::permissive());
 
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
