@@ -1,12 +1,21 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Lock, Mail, Loader2, Play, Square, Pause, RefreshCw, Minus, X } from 'lucide-react';
+import { Lock, Mail, Loader2, Play, Square, Pause, RefreshCw, Minus, X, Maximize2 } from 'lucide-react';
 import './index.css';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 function App() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [isMiniMode, setIsMiniMode] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+
+  const toggleMiniMode = (mini: boolean) => {
+    setIsMiniMode(mini);
+    (window as any).electronAPI?.setMiniMode(mini);
+  };
 
   const handleMinimize = () => {
     (window as any).electronAPI?.minimize();
@@ -15,22 +24,51 @@ function App() {
     (window as any).electronAPI?.close();
   };
 
+  if (isMiniMode) {
+    return (
+      <div style={{ height: '100vh', width: '100vw', background: 'transparent', padding: '10px' }}>
+        <div className="mini-widget">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="live-dot" style={{ background: isPaused ? '#f59e0b' : 'var(--accent)' }} />
+            <span className="timer-text">
+              {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:
+              {String(recordingDuration % 60).padStart(2, '0')}
+            </span>
+          </div>
+          <button onClick={() => toggleMiniMode(false)} className="mini-widget-btn" title="Expand">
+            <Maximize2 size={14} />
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', WebkitAppRegion: 'drag', background: 'rgba(30, 41, 59, 0.5)', borderBottom: '1px solid var(--glass-border)' }}>
-        <div style={{ fontWeight: 'bold', fontSize: '14px', color: 'var(--text-primary)' }}>ChronoTrack</div>
-        <div style={{ display: 'flex', gap: '8px', WebkitAppRegion: 'no-drag' }}>
-          <button onClick={handleMinimize} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
+      <div className="titlebar">
+        <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>ChronoTrack</div>
+        <div style={{ display: 'flex', gap: '4px', WebkitAppRegion: 'no-drag' }}>
+          <button onClick={handleMinimize} className="titlebar-btn">
             <Minus size={16} />
           </button>
-          <button onClick={handleClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
+          <button onClick={handleClose} className="titlebar-btn">
             <X size={16} />
           </button>
         </div>
       </div>
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', paddingBottom: '40px' }}>
         {sessionToken 
-          ? <Dashboard sessionToken={sessionToken} onLogout={() => setSessionToken(null)} />
+          ? <Dashboard 
+              sessionToken={sessionToken} 
+              onLogout={() => setSessionToken(null)} 
+              isRecording={isRecording}
+              setIsRecording={setIsRecording}
+              isPaused={isPaused}
+              setIsPaused={setIsPaused}
+              recordingDuration={recordingDuration}
+              setRecordingDuration={setRecordingDuration}
+              toggleMiniMode={toggleMiniMode}
+            />
           : <Login setSessionToken={setSessionToken} />
         }
       </div>
@@ -38,13 +76,33 @@ function App() {
   );
 }
 
-function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout: () => void }) {
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+interface DashboardProps {
+  sessionToken: string;
+  onLogout: () => void;
+  isRecording: boolean;
+  setIsRecording: (v: boolean) => void;
+  isPaused: boolean;
+  setIsPaused: (v: boolean) => void;
+  recordingDuration: number;
+  setRecordingDuration: (v: any) => void;
+  toggleMiniMode: (v: boolean) => void;
+}
+
+function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaused, setIsPaused, recordingDuration, setRecordingDuration, toggleMiniMode }: DashboardProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const timerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (isRecording && !isPaused) {
+      timerRef.current = setInterval(() => setRecordingDuration((prev: number) => prev + 1), 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isRecording, isPaused]);
 
   const startRecording = async () => {
     setError(null);
@@ -119,6 +177,12 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
       }, 1000);
       setIsRecording(true);
       setIsPaused(false);
+      setRecordingDuration(0);
+      
+      // Auto-minimize after 2.5 seconds
+      setTimeout(() => {
+        toggleMiniMode(true);
+      }, 2500);
     } catch (e: any) {
       console.error("Shift Start Error:", e);
       let errMsg = "Failed to start shift.";
@@ -214,26 +278,32 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
       )}
 
       {!isRecording ? (
-        <button onClick={startRecording} className="btn-primary" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
-          <Play size={18} /> Start Shift
+        <button onClick={startRecording} className="btn-primary" style={{ marginTop: '1rem' }}>
+          <Play size={18} fill="currentColor" /> Start Shift
         </button>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '1rem' }}>
           <button
             onClick={togglePause}
             className="btn-primary"
-            style={{ backgroundColor: isPaused ? '#3b82f6' : '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+            style={{ 
+              background: isPaused ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+              boxShadow: isPaused ? '0 4px 15px rgba(16,185,129,0.3)' : '0 4px 15px rgba(245,158,11,0.3)'
+            }}
           >
-            {isPaused ? <RefreshCw size={18} /> : <Pause size={18} />}
+            {isPaused ? <Play size={18} fill="currentColor" /> : <Pause size={18} fill="currentColor" />}
             {isPaused ? 'Resume Shift' : 'Pause Shift'}
           </button>
           
           <button
             onClick={stopRecording}
             className="btn-primary"
-            style={{ backgroundColor: '#ef4444', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+            style={{ 
+              background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+              boxShadow: '0 4px 15px rgba(239,68,68,0.3)'
+            }}
           >
-            <Square size={18} /> End Shift
+            <Square size={18} fill="currentColor" /> End Shift
           </button>
         </div>
       )}
