@@ -361,6 +361,8 @@ async fn list_recordings(
     State(state): State<AppState>,
     _auth: AuthUser,
 ) -> Result<Json<Vec<RecordingWithEmployee>>, StatusCode> {
+    // We want to return one entry PER SESSION that has recordings, 
+    // aggregating the total size and using the session's start time as created_at.
     let rows = sqlx::query_as::<
         _,
         (
@@ -368,17 +370,23 @@ async fn list_recordings(
             Uuid,
             String,
             String,
-            String,
             i64,
             chrono::DateTime<chrono::Utc>,
         ),
     >(
         r#"
-        SELECT r.id, r.session_id, u.name, u.email, r.file_path, r.size_bytes, r.created_at
-        FROM public.recordings r
-        JOIN public.sessions s ON r.session_id = s.id
+        SELECT 
+            s.id as recording_id, 
+            s.id as session_id, 
+            u.name, 
+            u.email, 
+            COALESCE(SUM(r.size_bytes), 0)::bigint as size_bytes, 
+            s.check_in_at as created_at
+        FROM public.sessions s
         JOIN public.users u ON s.employee_id = u.id
-        ORDER BY r.created_at DESC
+        JOIN public.recordings r ON r.session_id = s.id
+        GROUP BY s.id, u.name, u.email
+        ORDER BY s.check_in_at DESC
         LIMIT 200
         "#,
     )
@@ -389,13 +397,13 @@ async fn list_recordings(
     let recordings = rows
         .into_iter()
         .map(
-            |(id, session_id, name, email, file_path, size_bytes, created_at)| {
+            |(id, session_id, name, email, size_bytes, created_at)| {
                 RecordingWithEmployee {
-                    id,
+                    id, // Using session_id as the ID so the stream endpoint plays the full session!
                     session_id,
                     employee_name: name,
                     employee_email: email,
-                    file_path,
+                    file_path: "".to_string(), // not needed by frontend
                     size_bytes,
                     created_at,
                 }

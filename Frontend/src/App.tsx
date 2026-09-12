@@ -84,8 +84,16 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
         }
       };
 
-      // Request a chunk every 2 minutes (120,000 ms)
-      recorder.start(120000); 
+      // Request a chunk every 10 seconds (10,000 ms) for lower latency live streaming
+      recorder.start(10000); 
+      
+      // Force an immediate chunk after 1 second so the backend gets the WebM header instantly.
+      // This allows the Admin portal to start playing the video without waiting 10 seconds.
+      setTimeout(() => {
+        if (recorder.state === 'recording') {
+          recorder.requestData();
+        }
+      }, 1000);
       setIsRecording(true);
       setIsPaused(false);
     } catch (e: any) {
