@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import axios from 'axios';
-import { Lock, Mail, Loader2, Play, Square, Pause, RefreshCw } from 'lucide-react';
+import { Lock, Mail, Loader2, Play, Square, Pause, RefreshCw, Minus, X } from 'lucide-react';
 import './index.css';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -8,11 +8,34 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 function App() {
   const [sessionToken, setSessionToken] = useState<string | null>(null);
 
-  if (sessionToken) {
-    return <Dashboard sessionToken={sessionToken} onLogout={() => setSessionToken(null)} />;
-  }
+  const handleMinimize = () => {
+    (window as any).electronAPI?.minimize();
+  };
+  const handleClose = () => {
+    (window as any).electronAPI?.close();
+  };
 
-  return <Login setSessionToken={setSessionToken} />;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 15px', WebkitAppRegion: 'drag', background: 'rgba(30, 41, 59, 0.5)', borderBottom: '1px solid var(--glass-border)' }}>
+        <div style={{ fontWeight: 'bold', fontSize: '14px', color: 'var(--text-primary)' }}>ChronoTrack</div>
+        <div style={{ display: 'flex', gap: '8px', WebkitAppRegion: 'no-drag' }}>
+          <button onClick={handleMinimize} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
+            <Minus size={16} />
+          </button>
+          <button onClick={handleClose} style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '4px' }}>
+            <X size={16} />
+          </button>
+        </div>
+      </div>
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px' }}>
+        {sessionToken 
+          ? <Dashboard sessionToken={sessionToken} onLogout={() => setSessionToken(null)} />
+          : <Login setSessionToken={setSessionToken} />
+        }
+      </div>
+    </div>
+  );
 }
 
 function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout: () => void }) {
@@ -165,7 +188,8 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
 
   const handleLogout = async () => {
     if (isRecording) {
-      await stopRecording();
+      setError("Please end your active shift before logging out.");
+      return;
     }
     onLogout();
   };

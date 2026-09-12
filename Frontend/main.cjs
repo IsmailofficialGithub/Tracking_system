@@ -1,5 +1,16 @@
 const { app, BrowserWindow, ipcMain, Tray, Menu, desktopCapturer } = require('electron');
 const path = require('path');
+const fs = require('fs');
+
+function logEvent(message) {
+  try {
+    const logPath = path.join(app.getPath('userData'), 'app-security.log');
+    const timestamp = new Date().toISOString();
+    fs.appendFileSync(logPath, `[${timestamp}] ${message}\n`);
+  } catch (e) {
+    console.error("Failed to write log", e);
+  }
+}
 
 let mainWindow;
 let tray = null;
@@ -10,15 +21,19 @@ function createWindow() {
     height: 700,
     minWidth: 400,
     minHeight: 600,
+    frame: false,
+    transparent: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
     },
     autoHideMenuBar: true,
-    backgroundColor: '#0f172a',
-    show: false, // Wait until ready-to-show to prevent flickering
+    backgroundColor: '#00000000', // transparent
+    show: false,
   });
+
+  logEvent('Window created');
 
   // In development, load from Vite dev server. In production, load from dist.
   const isDev = process.env.NODE_ENV === 'development';
@@ -86,6 +101,19 @@ app.whenReady().then(() => {
     }
     return null;
   });
+
+  ipcMain.on('window-minimize', () => {
+    if (mainWindow) mainWindow.minimize();
+  });
+
+  ipcMain.on('window-close', () => {
+    if (mainWindow) {
+      logEvent('User clicked custom close button, minimizing to tray');
+      mainWindow.hide();
+    }
+  });
+
+  logEvent('App initialization complete');
 });
 
 app.on('window-all-closed', function () {
