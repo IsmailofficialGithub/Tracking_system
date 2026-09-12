@@ -38,39 +38,32 @@ pub struct RegisterRequest {
     pub name: String,
 }
 
-// Row returned from the DB login query
-struct UserRow {
-    id: Uuid,
-    password_hash: String,
-    role: Option<String>,
-}
-
 async fn login_handler(
     State(state): State<AppState>,
     Json(payload): Json<AuthRequest>,
 ) -> Result<Json<AuthResponse>, (StatusCode, String)> {
-    let row = sqlx::query_as!(
-        UserRow,
-        r#"SELECT id, password_hash, role::text as role FROM users WHERE email = $1"#,
-        payload.email
+    // Runtime query - no compile-time DB check
+    let row = sqlx::query_as::<_, (Uuid, String, Option<String>)>(
+        "SELECT id, password_hash, role::text FROM users WHERE email = $1"
     )
+    .bind(&payload.email)
     .fetch_optional(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let user = match row {
-        Some(u) => u,
+    let (id, password_hash, role) = match row {
+        Some(r) => r,
         None => return Err((StatusCode::UNAUTHORIZED, "Invalid email or password".to_string())),
     };
 
-    let is_valid = verify(&payload.password, &user.password_hash)
+    let is_valid = verify(&payload.password, &password_hash)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if !is_valid {
         return Err((StatusCode::UNAUTHORIZED, "Invalid email or password".to_string()));
     }
 
-    Ok(Json(AuthResponse { token: make_jwt(user.id, user.role)? }))
+    Ok(Json(AuthResponse { token: make_jwt(id, role)? }))
 }
 
 async fn register_handler(
@@ -80,18 +73,19 @@ async fn register_handler(
     let password_hash = hash(&payload.password, DEFAULT_COST)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    let row = sqlx::query_as!(
-        UserRow,
-        r#"INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, 'employee') RETURNING id, password_hash, role::text as role"#,
-        payload.email,
-        password_hash,
-        payload.name
+    // Runtime query - no compile-time DB check
+    let row = sqlx::query_as::<_, (Uuid, Option<String>)>(
+        "INSERT INTO users (email, password_hash, name, role) VALUES ($1, $2, $3, 'employee') RETURNING id, role::text"
     )
+    .bind(&payload.email)
+    .bind(&password_hash)
+    .bind(&payload.name)
     .fetch_one(&state.db)
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    Ok(Json(AuthResponse { token: make_jwt(row.id, row.role)? }))
+    let (id, role) = row;
+    Ok(Json(AuthResponse { token: make_jwt(id, role)? }))
 }
 
 fn make_jwt(user_id: Uuid, role: Option<String>) -> Result<String, (StatusCode, String)> {
