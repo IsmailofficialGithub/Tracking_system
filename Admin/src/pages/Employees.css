@@ -16,7 +16,7 @@
 .mt-4 { margin-top: 3rem; }
 
 .table-card {
-  overflow: hidden;
+  overflow-x: auto;
   padding: 0;
 }
 
@@ -159,4 +159,10 @@
   flex: 1;
   min-width: 180px;
   padding: 0.4rem 0.75rem;
+}
+
+@media (max-width: 768px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
 }

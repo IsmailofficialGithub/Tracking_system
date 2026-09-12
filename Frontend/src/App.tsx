@@ -163,6 +163,13 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
     setSessionId(null);
   };
 
+  const handleLogout = async () => {
+    if (isRecording) {
+      await stopRecording();
+    }
+    onLogout();
+  };
+
   return (
     <div className="glass-panel" style={{ width: '320px', textAlign: 'center' }}>
       <h2 style={{ marginBottom: '1rem' }}>
@@ -206,7 +213,7 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
           </button>
         </div>
       )}
-      <button onClick={onLogout} style={{ marginTop: '1rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline' }}>
+      <button onClick={handleLogout} style={{ marginTop: '1rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline' }}>
         Log Out
       </button>
     </div>

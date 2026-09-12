@@ -116,10 +116,9 @@ async fn stream_recording(
     let stream = stream! {
         let mut last_created_at: Option<chrono::DateTime<chrono::Utc>> = None;
         let mut session_ended = false;
-        let mut skipped_to_live = false;
+        let mut live_header_sent = false;
         
         loop {
-            // Check if the session is completed or not
             let status = sqlx::query_scalar::<_, String>(
                 "SELECT status::text FROM public.sessions WHERE id = $1"
             )
@@ -138,50 +137,73 @@ async fn stream_recording(
 
             let is_live_mode = query.live.unwrap_or(false) && !session_ended;
 
-            let rows = if let Some(last) = last_created_at {
-                if is_live_mode && !skipped_to_live {
-                    // We've yielded the first chunk (header). Now skip to the last 20 seconds.
-                    let twenty_secs_ago = chrono::Utc::now() - chrono::Duration::seconds(20);
-                    let skip_time = if twenty_secs_ago > last { twenty_secs_ago } else { last };
-                    skipped_to_live = true;
+            if is_live_mode && !live_header_sent {
+                live_header_sent = true;
+                let first_row = sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                    "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at ASC LIMIT 1"
+                )
+                .bind(recording_id)
+                .fetch_optional(&db)
+                .await
+                .unwrap_or(None);
 
-                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                        "SELECT file_path, created_at FROM public.recordings WHERE (session_id = $1 OR id = $1) AND created_at > $2 ORDER BY created_at ASC"
-                    )
-                    .bind(recording_id)
-                    .bind(skip_time)
-                    .fetch_all(&db)
-                    .await
-                    .unwrap_or_default()
+                if let Some((first_path, first_time)) = first_row {
+                    if let Ok(mut file) = fs::File::open(&first_path).await {
+                        let mut buf = Vec::new();
+                        let _ = file.read_to_end(&mut buf).await;
+                        let mut header_len = buf.len();
+                        for i in 0..buf.len().saturating_sub(4) {
+                            if buf[i] == 0x1F && buf[i+1] == 0x43 && buf[i+2] == 0xB6 && buf[i+3] == 0x75 {
+                                header_len = i;
+                                break;
+                            }
+                        }
+                        
+                        // Yield the WebM header
+                        if header_len > 0 {
+                            yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[..header_len]));
+                        }
+
+                        let twenty_secs_ago = chrono::Utc::now() - chrono::Duration::seconds(20);
+                        if first_time < twenty_secs_ago {
+                            // Session is older than 20s. Jump to live!
+                            last_created_at = Some(twenty_secs_ago);
+                        } else {
+                            // Session just started. Yield the rest of the first chunk.
+                            if header_len < buf.len() {
+                                yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[header_len..]));
+                            }
+                            last_created_at = Some(first_time);
+                        }
+                    }
                 } else {
-                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                        "SELECT file_path, created_at FROM public.recordings WHERE (session_id = $1 OR id = $1) AND created_at > $2 ORDER BY created_at ASC"
-                    )
-                    .bind(recording_id)
-                    .bind(last)
-                    .fetch_all(&db)
-                    .await
-                    .unwrap_or_default()
+                    // No chunks uploaded yet. Retry on next loop.
+                    live_header_sent = false;
                 }
+                
+                if !live_header_sent {
+                    tokio::time::sleep(Duration::from_millis(1500)).await;
+                }
+                continue;
+            }
+
+            let rows = if let Some(last) = last_created_at {
+                sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                    "SELECT file_path, created_at FROM public.recordings WHERE (session_id = $1 OR id = $1) AND created_at > $2 ORDER BY created_at ASC"
+                )
+                .bind(recording_id)
+                .bind(last)
+                .fetch_all(&db)
+                .await
+                .unwrap_or_default()
             } else {
-                if is_live_mode {
-                    // Fetch ONLY the first chunk to get the WebM initialization header
-                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                        "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at ASC LIMIT 1"
-                    )
-                    .bind(recording_id)
-                    .fetch_all(&db)
-                    .await
-                    .unwrap_or_default()
-                } else {
-                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                        "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at ASC"
-                    )
-                    .bind(recording_id)
-                    .fetch_all(&db)
-                    .await
-                    .unwrap_or_default()
-                }
+                sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                    "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at ASC"
+                )
+                .bind(recording_id)
+                .fetch_all(&db)
+                .await
+                .unwrap_or_default()
             };
 
             let got_new = !rows.is_empty();
@@ -198,11 +220,11 @@ async fn stream_recording(
             }
 
             if session_ended && !got_new {
-                break; // Done streaming all parts of the session!
+                break;
             }
 
             if !got_new {
-                tokio::time::sleep(Duration::from_secs(2)).await; // Wait for new chunks to arrive from the client
+                tokio::time::sleep(Duration::from_millis(1500)).await;
             }
         }
     };

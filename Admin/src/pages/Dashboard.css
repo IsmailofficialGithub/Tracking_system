@@ -144,3 +144,21 @@
 }
 
 .td-name { font-weight: 500; }
+
+@media (max-width: 768px) {
+  .live-session-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .live-session-meta {
+    width: 100%;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    padding-left: 26px; /* align with text */
+  }
+  .recent-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}
