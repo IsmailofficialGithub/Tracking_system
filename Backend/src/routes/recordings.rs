@@ -12,7 +12,7 @@ use crate::auth::AuthUser;
 use crate::state::AppState;
 
 pub fn recordings_routes() -> Router<AppState> {
-    Router::new().route("/upload/:session_id", post(upload_chunk))
+    Router::new().route("/upload/{session_id}", post(upload_chunk))
 }
 
 async fn upload_chunk(
