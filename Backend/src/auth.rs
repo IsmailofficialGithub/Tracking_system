@@ -40,8 +40,10 @@ where
         let jwt_secret = env::var("JWT_SECRET")
             .unwrap_or_else(|_| "super-secret-jwt-token-with-at-least-32-bytes-long".to_string());
 
-        let mut validation = Validation::default();
-        validation.validate_aud = false;
+        let validation = Validation {
+            validate_aud: false,
+            ..Default::default()
+        };
 
         let token_data = decode::<Claims>(
             token,

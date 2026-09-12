@@ -164,9 +164,9 @@ async fn create_shift_template(
         "#,
     )
     .bind(&payload.name)
-    .bind(&payload.start_time)
-    .bind(&payload.end_time)
-    .bind(&payload.grace_minutes)
+    .bind(payload.start_time)
+    .bind(payload.end_time)
+    .bind(payload.grace_minutes)
     .bind(&payload.timezone)
     .fetch_one(&state.db)
     .await
