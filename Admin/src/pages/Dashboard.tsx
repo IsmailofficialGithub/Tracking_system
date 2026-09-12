@@ -138,7 +138,7 @@ const Dashboard: React.FC = () => {
               {sessionLogs.length === 0 ? (
                 <p className="text-muted text-sm">No logs found.</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
                   {sessionLogs.map(log => {
                     const eventColors: Record<string, string> = { check_in: '#10b981', pause: '#f59e0b', resume: '#3b82f6', check_out: '#ef4444' };
                     const eventLabels: Record<string, string> = { check_in: 'Checked In', pause: 'Paused Shift', resume: 'Resumed Shift', check_out: 'Checked Out' };
