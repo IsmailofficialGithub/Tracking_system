@@ -53,8 +53,17 @@ jobs:
           PORT: ${{ secrets.PORT }}
         run: |
           mkdir -p ~/.ssh
-          printf "%s\n" "$SSH_KEY" > ~/.ssh/id_rsa
+          # Restore multiline format if newlines were escaped as literal \n
+          echo "$SSH_KEY" | sed 's/\\n/\n/g' > ~/.ssh/id_rsa
+          echo "" >> ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
+          
+          # Try decoding base64 if key was base64 encoded
+          if ! grep -q "BEGIN" ~/.ssh/id_rsa; then
+            echo "$SSH_KEY" | base64 -d > ~/.ssh/id_rsa 2>/dev/null || true
+            chmod 600 ~/.ssh/id_rsa
+          fi
+
           ssh -o StrictHostKeyChecking=no -p "$PORT" "$USER@$HOST" '
             set -e
             if [ -d "$HOME/Tracking_system" ]; then cd "$HOME/Tracking_system";
