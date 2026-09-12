@@ -86,6 +86,7 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/employee-shifts", post(assign_shift))
         // Sessions / Logs
         .route("/sessions", get(list_sessions))
+        .route("/sessions/{id}/logs", get(list_session_logs))
         // Recordings
         .route("/recordings", get(list_recordings))
 }
@@ -334,6 +335,24 @@ async fn list_sessions(
         .collect();
 
     Ok(Json(sessions))
+}
+
+use crate::models::SessionLog;
+
+async fn list_session_logs(
+    State(state): State<AppState>,
+    _auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<Vec<SessionLog>>, StatusCode> {
+    let logs = sqlx::query_as::<_, SessionLog>(
+        "SELECT * FROM public.session_logs WHERE session_id = $1 ORDER BY event_time ASC"
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(logs))
 }
 
 // ---- Recordings ----

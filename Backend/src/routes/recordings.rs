@@ -80,6 +80,10 @@ async fn upload_chunk(
     Ok(StatusCode::CREATED)
 }
 
+use async_stream::stream;
+use axum::body::Body;
+use std::time::Duration;
+
 // Stream a recording file back to the admin browser
 // Accepts token as query param since <video src> can't set Authorization headers
 async fn stream_recording(
@@ -106,28 +110,74 @@ async fn stream_recording(
         return (StatusCode::UNAUTHORIZED, "Invalid token").into_response();
     }
 
-    // Look up recording path
-    let row =
-        sqlx::query_as::<_, (String,)>("SELECT file_path FROM public.recordings WHERE id = $1 OR session_id = $1 ORDER BY created_at DESC LIMIT 1")
+    let db = state.db.clone();
+
+    let stream = stream! {
+        let mut last_created_at: Option<chrono::DateTime<chrono::Utc>> = None;
+        let mut session_ended = false;
+        
+        loop {
+            // Check if the session is completed or not
+            let status = sqlx::query_scalar::<_, String>(
+                "SELECT status::text FROM public.sessions WHERE id = $1"
+            )
             .bind(recording_id)
-            .fetch_optional(&state.db)
-            .await;
+            .fetch_optional(&db)
+            .await
+            .unwrap_or(None);
 
-    let file_path = match row {
-        Ok(Some((p,))) => p,
-        _ => return (StatusCode::NOT_FOUND, "Recording not found").into_response(),
+            if let Some(s) = status {
+                if s == "completed" {
+                    session_ended = true;
+                }
+            } else {
+                // If the id doesn't match a session, it might be a direct recording id.
+                // We'll treat it as ended since we just want to play that one recording.
+                session_ended = true;
+            }
+
+            let rows = if let Some(last) = last_created_at {
+                sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                    "SELECT file_path, created_at FROM public.recordings WHERE (session_id = $1 OR id = $1) AND created_at > $2 ORDER BY created_at ASC"
+                )
+                .bind(recording_id)
+                .bind(last)
+                .fetch_all(&db)
+                .await
+                .unwrap_or_default()
+            } else {
+                sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                    "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at ASC"
+                )
+                .bind(recording_id)
+                .fetch_all(&db)
+                .await
+                .unwrap_or_default()
+            };
+
+            let got_new = !rows.is_empty();
+
+            for (file_path, created_at) in rows {
+                last_created_at = Some(created_at);
+                if let Ok(mut file) = fs::File::open(&file_path).await {
+                    let mut buf = vec![0; 65536];
+                    while let Ok(n) = file.read(&mut buf).await {
+                        if n == 0 { break; }
+                        yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[..n]));
+                    }
+                }
+            }
+
+            if session_ended && !got_new {
+                break; // Done streaming all parts of the session!
+            }
+
+            if !got_new {
+                tokio::time::sleep(Duration::from_secs(2)).await; // Wait for new chunks to arrive from the client
+            }
+        }
     };
 
-    // Read file and send
-    let mut file = match fs::File::open(&file_path).await {
-        Ok(f) => f,
-        Err(_) => return (StatusCode::NOT_FOUND, "File not found on disk").into_response(),
-    };
-
-    let mut contents = Vec::new();
-    if file.read_to_end(&mut contents).await.is_err() {
-        return (StatusCode::INTERNAL_SERVER_ERROR, "Failed to read file").into_response();
-    }
-
-    ([(header::CONTENT_TYPE, "video/webm")], contents).into_response()
+    let body = Body::from_stream(stream);
+    ([(header::CONTENT_TYPE, "video/webm")], body).into_response()
 }

@@ -26,6 +26,8 @@ pub fn employee_routes() -> Router<AppState> {
     Router::new()
         .route("/check-in", post(check_in))
         .route("/check-out", post(check_out))
+        .route("/pause", post(pause))
+        .route("/resume", post(resume))
         .route("/my-shift", get(my_shift))
 }
 
@@ -76,6 +78,15 @@ async fn check_in(
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
     if let Some(session_id) = existing_session {
+        // Log resume event
+        sqlx::query(
+            "INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'resume')"
+        )
+        .bind(session_id)
+        .execute(&state.db)
+        .await
+        .ok();
+
         return Ok((
             StatusCode::OK,
             Json(CheckInResponse { session_id }),
@@ -101,6 +112,15 @@ async fn check_in(
     .await
     .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
+    // Log check_in event
+    sqlx::query(
+        "INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'check_in')"
+    )
+    .bind(session.id)
+    .execute(&state.db)
+    .await
+    .ok();
+
     Ok((
         StatusCode::CREATED,
         Json(CheckInResponse {
@@ -116,23 +136,86 @@ async fn check_out(
     let employee_id = Uuid::parse_str(&auth.0.sub).map_err(|_| StatusCode::BAD_REQUEST)?;
     let now = Utc::now();
 
-    let result = sqlx::query(
+    let result = sqlx::query_scalar::<_, Uuid>(
         r#"
         UPDATE public.sessions
         SET check_out_at = $1, status = 'completed'
         WHERE employee_id = $2 AND check_out_at IS NULL
+        RETURNING id
         "#,
     )
     .bind(now)
     .bind(employee_id)
-    .execute(&state.db)
+    .fetch_optional(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if result.rows_affected() == 0 {
-        return Err(StatusCode::NOT_FOUND);
+    if let Some(session_id) = result {
+        // Log check_out event
+        sqlx::query(
+            "INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'check_out')"
+        )
+        .bind(session_id)
+        .execute(&state.db)
+        .await
+        .ok();
+        
+        Ok(StatusCode::OK)
+    } else {
+        Err(StatusCode::NOT_FOUND)
     }
-    Ok(StatusCode::OK)
+}
+
+async fn pause(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<StatusCode, StatusCode> {
+    let employee_id = Uuid::parse_str(&auth.0.sub).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let session_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM public.sessions WHERE employee_id = $1 AND check_out_at IS NULL LIMIT 1"
+    )
+    .bind(employee_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(sid) = session_id {
+        sqlx::query("INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'pause')")
+            .bind(sid)
+            .execute(&state.db)
+            .await
+            .ok();
+        Ok(StatusCode::OK)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn resume(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<StatusCode, StatusCode> {
+    let employee_id = Uuid::parse_str(&auth.0.sub).map_err(|_| StatusCode::BAD_REQUEST)?;
+
+    let session_id = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM public.sessions WHERE employee_id = $1 AND check_out_at IS NULL LIMIT 1"
+    )
+    .bind(employee_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(sid) = session_id {
+        sqlx::query("INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'resume')")
+            .bind(sid)
+            .execute(&state.db)
+            .await
+            .ok();
+        Ok(StatusCode::OK)
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
 
 // Returns the employee's current shift details so the Electron app can show shift info

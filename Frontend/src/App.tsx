@@ -104,14 +104,25 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
     }
   };
 
-  const togglePause = () => {
-    if (!mediaRecorderRef.current) return;
-    if (isPaused) {
-      mediaRecorderRef.current.resume();
-      setIsPaused(false);
-    } else {
-      mediaRecorderRef.current.pause();
-      setIsPaused(true);
+  const togglePause = async () => {
+    if (!mediaRecorderRef.current || !sessionId) return;
+    try {
+      if (isPaused) {
+        await axios.post(`${BACKEND_URL}/api/employee/resume`, {}, {
+          headers: { Authorization: `Bearer ${sessionToken}` }
+        });
+        mediaRecorderRef.current.resume();
+        setIsPaused(false);
+      } else {
+        await axios.post(`${BACKEND_URL}/api/employee/pause`, {}, {
+          headers: { Authorization: `Bearer ${sessionToken}` }
+        });
+        mediaRecorderRef.current.pause();
+        setIsPaused(true);
+      }
+    } catch (err) {
+      console.error("Failed to toggle pause state", err);
+      setError("Failed to pause/resume tracking.");
     }
   };
 

@@ -77,3 +77,21 @@ pub struct Recording {
     pub size_bytes: i64,
     pub created_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Serialize, Deserialize, sqlx::Type, PartialEq, Clone)]
+#[sqlx(type_name = "session_event", rename_all = "snake_case")]
+pub enum SessionEvent {
+    CheckIn,
+    Pause,
+    Resume,
+    CheckOut,
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct SessionLog {
+    pub id: Uuid,
+    pub session_id: Uuid,
+    pub event_type: SessionEvent,
+    pub event_time: DateTime<Utc>,
+}

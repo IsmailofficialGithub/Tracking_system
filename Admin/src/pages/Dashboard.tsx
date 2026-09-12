@@ -13,10 +13,28 @@ interface Session {
   recording_id?: string;
 }
 
+interface SessionLog {
+  id: string;
+  session_id: string;
+  event_type: 'check_in' | 'pause' | 'resume' | 'check_out';
+  event_time: string;
+}
+
 const Dashboard: React.FC = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLiveSession, setSelectedLiveSession] = useState<Session | null>(null);
+  const [sessionLogs, setSessionLogs] = useState<SessionLog[]>([]);
+
+  useEffect(() => {
+    if (selectedLiveSession) {
+      api.get(`/admin/sessions/${selectedLiveSession.id}/logs`)
+        .then(r => setSessionLogs(r.data))
+        .catch(console.error);
+    } else {
+      setSessionLogs([]);
+    }
+  }, [selectedLiveSession]);
 
   useEffect(() => {
     const load = () => {
@@ -114,6 +132,29 @@ const Dashboard: React.FC = () => {
             <p className="text-muted text-sm" style={{ marginTop: '0.75rem', textAlign: 'center' }}>
               🔴 Real-time stream feed updates automatically as chunk data uploads from desktop client.
             </p>
+
+            <div style={{ marginTop: '1.5rem', background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '8px' }}>
+              <h4 style={{ marginBottom: '0.75rem' }}>Day Logs (Timeline)</h4>
+              {sessionLogs.length === 0 ? (
+                <p className="text-muted text-sm">No logs found.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {sessionLogs.map(log => {
+                    const eventColors: Record<string, string> = { check_in: '#10b981', pause: '#f59e0b', resume: '#3b82f6', check_out: '#ef4444' };
+                    const eventLabels: Record<string, string> = { check_in: 'Checked In', pause: 'Paused Shift', resume: 'Resumed Shift', check_out: 'Checked Out' };
+                    return (
+                      <div key={log.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 0.75rem', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: eventColors[log.event_type] || '#ccc' }} />
+                          <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{eventLabels[log.event_type] || log.event_type}</span>
+                        </div>
+                        <span className="text-muted" style={{ fontSize: '0.85rem' }}>{new Date(log.event_time).toLocaleTimeString()}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
