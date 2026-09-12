@@ -25,6 +25,7 @@ const Employees: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [showCreateShift, setShowCreateShift] = useState(false);
+  const [editingShift, setEditingShift] = useState<ShiftTemplate | null>(null);
   const [showAssignShift, setShowAssignShift] = useState<string | null>(null); // employee id
   const [selectedShiftId, setSelectedShiftId] = useState('');
   const [error, setError] = useState('');
@@ -75,11 +76,35 @@ const Employees: React.FC = () => {
   const handleCreateShift = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.post('/admin/shift-templates', newShift);
+      const formattedShift = {
+        ...newShift,
+        start_time: newShift.start_time.length === 5 ? `${newShift.start_time}:00` : newShift.start_time,
+        end_time: newShift.end_time.length === 5 ? `${newShift.end_time}:00` : newShift.end_time,
+      };
+      await api.post('/admin/shift-templates', formattedShift);
       setShowCreateShift(false);
       loadData();
     } catch {
       setError('Failed to create shift template');
+    }
+  };
+
+  const handleUpdateShift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingShift) return;
+    try {
+      const formattedShift = {
+        name: editingShift.name,
+        start_time: editingShift.start_time.length === 5 ? `${editingShift.start_time}:00` : editingShift.start_time,
+        end_time: editingShift.end_time.length === 5 ? `${editingShift.end_time}:00` : editingShift.end_time,
+        grace_minutes: Number(editingShift.grace_minutes),
+        timezone: editingShift.timezone,
+      };
+      await api.put(`/admin/shift-templates/${editingShift.id}`, formattedShift);
+      setEditingShift(null);
+      loadData();
+    } catch {
+      setError('Failed to update shift template');
     }
   };
 
@@ -239,7 +264,7 @@ const Employees: React.FC = () => {
               <div className="form-row">
                 <div className="input-group">
                   <label className="input-label">Grace Period (minutes)</label>
-                  <input className="input-field" type="number" value={newShift.grace_minutes} onChange={e => setNewShift({...newShift, grace_minutes: parseInt(e.target.value)})} required />
+                  <input className="input-field" type="number" value={newShift.grace_minutes} onChange={e => setNewShift({...newShift, grace_minutes: parseInt(e.target.value) || 0})} required />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Timezone</label>
@@ -255,14 +280,55 @@ const Employees: React.FC = () => {
         </div>
       )}
 
+      {editingShift && (
+        <div className="modal-overlay" onClick={() => setEditingShift(null)}>
+          <div className="modal glass-panel" onClick={e => e.stopPropagation()}>
+            <h3>Edit Shift Template</h3>
+            <form onSubmit={handleUpdateShift}>
+              <div className="input-group">
+                <label className="input-label">Shift Name</label>
+                <input className="input-field" value={editingShift.name} onChange={e => setEditingShift({...editingShift, name: e.target.value})} required />
+              </div>
+              <div className="form-row">
+                <div className="input-group">
+                  <label className="input-label">Start Time</label>
+                  <input className="input-field" type="time" value={editingShift.start_time.slice(0, 5)} onChange={e => setEditingShift({...editingShift, start_time: e.target.value})} required />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">End Time</label>
+                  <input className="input-field" type="time" value={editingShift.end_time.slice(0, 5)} onChange={e => setEditingShift({...editingShift, end_time: e.target.value})} required />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="input-group">
+                  <label className="input-label">Grace Period (minutes)</label>
+                  <input className="input-field" type="number" value={editingShift.grace_minutes} onChange={e => setEditingShift({...editingShift, grace_minutes: parseInt(e.target.value) || 0})} required />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Timezone</label>
+                  <input className="input-field" value={editingShift.timezone} onChange={e => setEditingShift({...editingShift, timezone: e.target.value})} required />
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-outline" onClick={() => setEditingShift(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       <div className="shifts-grid">
         {shifts.map(s => (
           <div key={s.id} className="shift-card glass-panel">
             <div className="shift-card-header">
               <h4>{s.name}</h4>
-              <button className="btn btn-sm btn-danger" onClick={() => handleDeleteShift(s.id)}>✕</button>
+              <div className="action-row">
+                <button className="btn btn-sm btn-outline" onClick={() => setEditingShift(s)}>✎ Edit</button>
+                <button className="btn btn-sm btn-danger" onClick={() => handleDeleteShift(s.id)}>✕</button>
+              </div>
             </div>
-            <p className="text-muted">{s.start_time} → {s.end_time}</p>
+            <p className="text-muted">{s.start_time.slice(0, 5)} → {s.end_time.slice(0, 5)}</p>
             <p className="text-muted text-sm">Grace: {s.grace_minutes} mins · {s.timezone}</p>
           </div>
         ))}

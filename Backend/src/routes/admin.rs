@@ -5,7 +5,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
 };
 use bcrypt::{DEFAULT_COST, hash};
 use chrono::{NaiveDate, NaiveTime};
@@ -19,6 +19,15 @@ pub struct CreateShiftTemplate {
     pub end_time: NaiveTime,
     pub grace_minutes: i32,
     pub timezone: String,
+}
+
+#[derive(Deserialize)]
+pub struct UpdateShiftTemplate {
+    pub name: Option<String>,
+    pub start_time: Option<NaiveTime>,
+    pub end_time: Option<NaiveTime>,
+    pub grace_minutes: Option<i32>,
+    pub timezone: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -69,7 +78,10 @@ pub fn admin_routes() -> Router<AppState> {
             "/shift-templates",
             get(list_shift_templates).post(create_shift_template),
         )
-        .route("/shift-templates/{id}", delete(delete_shift_template))
+        .route(
+            "/shift-templates/{id}",
+            put(update_shift_template).delete(delete_shift_template),
+        )
         // Shift Assignments
         .route("/employee-shifts", post(assign_shift))
         // Sessions / Logs
@@ -173,6 +185,38 @@ async fn create_shift_template(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok((StatusCode::CREATED, Json(template)))
+}
+
+async fn update_shift_template(
+    State(state): State<AppState>,
+    _auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<UpdateShiftTemplate>,
+) -> Result<Json<ShiftTemplate>, StatusCode> {
+    let template = sqlx::query_as::<_, ShiftTemplate>(
+        r#"
+        UPDATE public.shift_templates
+        SET
+            name = COALESCE($1, name),
+            start_time = COALESCE($2, start_time),
+            end_time = COALESCE($3, end_time),
+            grace_minutes = COALESCE($4, grace_minutes),
+            timezone = COALESCE($5, timezone)
+        WHERE id = $6
+        RETURNING *
+        "#,
+    )
+    .bind(&payload.name)
+    .bind(payload.start_time)
+    .bind(payload.end_time)
+    .bind(payload.grace_minutes)
+    .bind(&payload.timezone)
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Json(template))
 }
 
 async fn delete_shift_template(
