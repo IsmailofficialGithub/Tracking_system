@@ -3,8 +3,6 @@ import axios from 'axios';
 import { Lock, Mail, Loader2, Play, Square } from 'lucide-react';
 import './index.css';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
 
 function App() {
@@ -154,22 +152,21 @@ function Login({ setSessionToken }: { setSessionToken: (token: string) => void }
 
     try {
       const res = await axios.post(
-        `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+        `${BACKEND_URL}/api/auth/login`,
         { email, password },
         {
           headers: {
-            'apikey': SUPABASE_ANON_KEY,
             'Content-Type': 'application/json'
           }
         }
       );
       
       // Store token
-      const token = res.data.access_token;
+      const token = res.data.token;
       setSessionToken(token);
       
     } catch (err: any) {
-      setError(err.response?.data?.error_description || 'Invalid credentials.');
+      setError(err.response?.data?.error || 'Invalid credentials.');
     } finally {
       setLoading(false);
     }

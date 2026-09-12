@@ -5,8 +5,8 @@ use axum::{
     routing::post,
     Router,
 };
-use reqwest::Client;
 use std::env;
+use tokio::fs;
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
@@ -20,7 +20,7 @@ async fn upload_chunk(
     State(state): State<AppState>,
     auth: AuthUser,
     Path(session_id): Path<Uuid>,
-    body: Bytes, // In-memory bytes for the chunk (typically < 5MB, very safe)
+    body: Bytes,
 ) -> Result<StatusCode, StatusCode> {
     let employee_id = Uuid::parse_str(&auth.0.sub).map_err(|_| StatusCode::BAD_REQUEST)?;
 
@@ -38,30 +38,23 @@ async fn upload_chunk(
         return Err(StatusCode::FORBIDDEN);
     }
 
-    // 2. Upload to Supabase Storage using Reqwest
-    let supabase_url = env::var("SUPABASE_URL").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let service_key = env::var("SUPABASE_SERVICE_ROLE_KEY").map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    
-    // Path: {employee_id}/{session_id}/{chunk_uuid}.webm
+    // 2. Save to Local Storage
     let chunk_id = Uuid::new_v4();
-    let file_path = format!("{}/{}/{}.webm", employee_id, session_id, chunk_id);
-    let storage_url = format!("{}/storage/v1/object/recordings/{}", supabase_url, file_path);
+    let dir_path = format!("uploads/recordings/{}/{}", employee_id, session_id);
+    let file_path = format!("{}/{}.webm", dir_path, chunk_id);
     
     let size_bytes = body.len() as i64;
 
-    let client = Client::new();
-    let res = client.post(&storage_url)
-        .header("Authorization", format!("Bearer {}", service_key))
-        .header("apikey", service_key)
-        .header("Content-Type", "video/webm")
-        .body(body)
-        .send()
-        .await
-        .map_err(|_| StatusCode::BAD_GATEWAY)?;
-        
-    if !res.status().is_success() {
-        eprintln!("Storage Error: {:?}", res.text().await);
-        return Err(StatusCode::BAD_GATEWAY);
+    // Create directories if they don't exist
+    if let Err(e) = fs::create_dir_all(&dir_path).await {
+        eprintln!("Failed to create directory {}: {}", dir_path, e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    // Write file
+    if let Err(e) = fs::write(&file_path, &body).await {
+        eprintln!("Failed to write file {}: {}", file_path, e);
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
     }
     
     // 3. Insert metadata into DB

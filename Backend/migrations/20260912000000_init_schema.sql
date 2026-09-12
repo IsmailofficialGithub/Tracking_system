@@ -4,11 +4,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Enum for User Roles
 CREATE TYPE user_role AS ENUM ('super_admin', 'manager', 'employee');
 
--- Users table (extends auth.users)
+-- Users table
 CREATE TABLE public.users (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
     name TEXT NOT NULL,
-    username TEXT UNIQUE NOT NULL,
     role user_role DEFAULT 'employee'::user_role NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
@@ -34,7 +35,26 @@ CREATE TABLE public.employee_shifts (
     created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
 );
 
--- Turn on RLS but leave it open for the service role (Backend API)
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.shift_templates ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.employee_shifts ENABLE ROW LEVEL SECURITY;
+-- Enum for Session Status
+CREATE TYPE session_status AS ENUM ('on_time', 'late', 'interrupted', 'ended_early', 'completed');
+
+-- Sessions Table
+CREATE TABLE public.sessions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    employee_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    shift_template_id UUID NOT NULL REFERENCES public.shift_templates(id) ON DELETE CASCADE,
+    check_in_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    check_out_at TIMESTAMPTZ,
+    status session_status NOT NULL,
+    recording_id UUID,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);
+
+-- Create recordings table for video metadata
+CREATE TABLE public.recordings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id UUID NOT NULL REFERENCES public.sessions(id) ON DELETE CASCADE,
+    file_path TEXT NOT NULL,
+    size_bytes BIGINT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW() NOT NULL
+);

@@ -1,5 +1,16 @@
 version: '3.8'
 services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: tracking_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   backend:
     build: 
       context: ./Backend
@@ -8,11 +19,13 @@ services:
       - "3000:3000"
     environment:
       - PORT=3000
-      - DATABASE_URL=postgres://postgres:postgres@host.docker.internal:54322/postgres
-      - SUPABASE_URL=http://host.docker.internal:54321
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - DATABASE_URL=postgres://postgres:postgrespassword@db:5432/tracking_db
+      - JWT_SECRET=super-secret-jwt-token-with-at-least-32-bytes-long
+    depends_on:
+      - db
+    volumes:
+      - ./uploads:/app/uploads
     restart: unless-stopped
+
+volumes:
+  postgres_data:

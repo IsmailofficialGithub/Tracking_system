@@ -19,6 +19,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/health", get(health_check))
+        .nest("/api/auth", routes::auth_api::auth_routes())
         .nest("/api/admin", routes::admin::admin_routes())
         .nest("/api/employee", routes::employee::employee_routes())
         .nest("/api/employee/recordings", routes::recordings::recordings_routes())
