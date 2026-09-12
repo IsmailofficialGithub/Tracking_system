@@ -18,10 +18,12 @@ function App() {
 function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout: () => void }) {
   const [isRecording, setIsRecording] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const startRecording = async () => {
+    setError(null);
     try {
       // 1. Check In via API
       const checkInRes = await axios.post(`${BACKEND_URL}/api/employee/check-in`, {}, {
@@ -75,7 +77,6 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
             );
           } catch (uploadError) {
             console.error("Failed to upload chunk", uploadError);
-            // In a production app, we would cache to disk here for retrying later.
           }
         }
       };
@@ -83,13 +84,24 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
       // Request a chunk every 2 minutes (120,000 ms)
       recorder.start(120000); 
       setIsRecording(true);
-    } catch (e) {
+    } catch (e: any) {
       console.error("Shift Start Error:", e);
-      alert("Failed to start shift. Check permissions and backend connection.");
+      let errMsg = "Failed to start shift.";
+      if (e.response?.data) {
+        if (typeof e.response.data === 'string') {
+          errMsg = e.response.data;
+        } else if (typeof e.response.data === 'object') {
+          errMsg = e.response.data.error || e.response.data.message || JSON.stringify(e.response.data);
+        }
+      } else if (e.message) {
+        errMsg = e.message;
+      }
+      setError(errMsg);
     }
   };
 
   const stopRecording = async () => {
+    setError(null);
     // Stop recording engine
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
@@ -119,10 +131,16 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
   return (
     <div className="glass-panel" style={{ width: '320px', textAlign: 'center' }}>
       <h2 style={{ marginBottom: '1rem' }}>{isRecording ? 'Tracking Active' : 'Dashboard'}</h2>
-      <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>
+      <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
         {isRecording ? 'You are currently checked in and tracking.' : 'Ready to start your shift.'}
       </p>
       
+      {error && (
+        <div style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '10px', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.85rem', textAlign: 'left' }}>
+          ⚠️ {error}
+        </div>
+      )}
+
       {!isRecording ? (
         <button onClick={startRecording} className="btn-primary" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
           <Play size={18} /> Start Shift
