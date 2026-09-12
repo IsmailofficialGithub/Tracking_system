@@ -1,12 +1,12 @@
-name: Backend CI
+name: CI/CD Pipeline
 
 on:
   push:
-    paths:
-      - 'Backend/**'
+    branches:
+      - main
   pull_request:
-    paths:
-      - 'Backend/**'
+    branches:
+      - main
 
 jobs:
   test:
@@ -36,3 +36,35 @@ jobs:
 
       - name: Verify Docker Build
         run: docker build -t backend:ci .
+
+  deploy:
+    name: Deploy to Server
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH Remote Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.PORT }}
+          script: |
+            set -e
+            if [ -d "$HOME/Tracking_system" ]; then
+              cd "$HOME/Tracking_system"
+            elif [ -d "$HOME/tracking_system" ]; then
+              cd "$HOME/tracking_system"
+            elif [ -d "/var/www/Tracking_system" ]; then
+              cd "/var/www/Tracking_system"
+            elif [ -d "/var/www/tracking_system" ]; then
+              cd "/var/www/tracking_system"
+            else
+              cd $(dirname $(find /root /var/www -name "docker-compose.yml" 2>/dev/null | head -n 1))
+            fi
+            echo "Deploying latest code in directory: $(pwd)"
+            git fetch --all
+            git reset --hard origin/main
+            docker compose up -d --build || docker-compose up -d --build
+            echo "Deployment successful!"
