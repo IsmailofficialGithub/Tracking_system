@@ -18,8 +18,6 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedLiveSession, setSelectedLiveSession] = useState<Session | null>(null);
 
-  const apiBaseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
-
   useEffect(() => {
     const load = () => {
       api.get('/admin/sessions')
