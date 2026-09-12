@@ -108,7 +108,7 @@ async fn stream_recording(
 
     // Look up recording path
     let row =
-        sqlx::query_as::<_, (String,)>("SELECT file_path FROM public.recordings WHERE id = $1")
+        sqlx::query_as::<_, (String,)>("SELECT file_path FROM public.recordings WHERE id = $1 OR session_id = $1 ORDER BY created_at DESC LIMIT 1")
             .bind(recording_id)
             .fetch_optional(&state.db)
             .await;

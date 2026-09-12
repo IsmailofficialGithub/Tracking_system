@@ -18,7 +18,7 @@ const Recordings: React.FC = () => {
   const [playing, setPlaying] = useState<Recording | null>(null);
   const [filter, setFilter] = useState('');
 
-  const apiBaseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
+  const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
   useEffect(() => {
     api.get('/admin/recordings')
@@ -39,7 +39,7 @@ const Recordings: React.FC = () => {
 
   const videoUrl = (r: Recording) => {
     const token = localStorage.getItem('admin_token');
-    return `${apiBaseUrl}/api/employee/recordings/stream/${r.id}?token=${token}`;
+    return `${baseUrl}/employee/recordings/stream/${r.id}?token=${token}`;
   };
 
   return (
