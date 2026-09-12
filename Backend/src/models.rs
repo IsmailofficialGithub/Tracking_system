@@ -14,8 +14,11 @@ pub enum UserRole {
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct User {
     pub id: Uuid,
+    pub email: String,
+    #[serde(skip_serializing)]
+    #[allow(dead_code)]
+    pub password_hash: String,
     pub name: String,
-    pub username: String,
     pub role: UserRole,
     pub created_at: DateTime<Utc>,
 }
