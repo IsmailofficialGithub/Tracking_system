@@ -6,7 +6,7 @@
   "main": "main.cjs",
   "scripts": {
     "dev": "vite",
-    "electron:dev": "concurrently \"vite\" \"cross-env NODE_ENV=development wait-on tcp:5173 && electron .\"",
+    "electron:dev": "concurrently \"vite\" \"wait-on tcp:5173 && cross-env NODE_ENV=development electron .\"",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview"
