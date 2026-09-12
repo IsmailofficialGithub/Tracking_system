@@ -27,5 +27,17 @@ services:
       - ./uploads:/app/uploads
     restart: unless-stopped
 
+    migrator:
+      build:
+        context: ./Backend
+        dockerfile: Dockerfile
+        target: builder
+      command: ["cargo","sqlx","migrate","run"]
+      environment:
+        - DATABASE_URL=postgres://postgres:postgrespassword@db:5432/tracking_db
+      depends_on:
+        - db
+      restart: "no"
+
 volumes:
   postgres_data:
