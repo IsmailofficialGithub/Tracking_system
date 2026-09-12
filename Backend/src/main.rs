@@ -10,6 +10,11 @@ mod state;
 
 #[tokio::main]
 async fn main() {
+    // Install default crypto provider for rustls (required by jsonwebtoken 11 / sqlx 0.8+)
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
+
     // Load environment variables from .env file
     dotenvy::dotenv().ok();
 
