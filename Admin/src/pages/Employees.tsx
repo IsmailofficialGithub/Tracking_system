@@ -1,0 +1,275 @@
+import React, { useState, useEffect } from 'react';
+import api from '../api/axios';
+import './Employees.css';
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  created_at: string;
+}
+
+interface ShiftTemplate {
+  id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  grace_minutes: number;
+  timezone: string;
+}
+
+const Employees: React.FC = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [shifts, setShifts] = useState<ShiftTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [showCreateShift, setShowCreateShift] = useState(false);
+  const [showAssignShift, setShowAssignShift] = useState<string | null>(null); // employee id
+  const [selectedShiftId, setSelectedShiftId] = useState('');
+  const [error, setError] = useState('');
+
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'employee' });
+  const [newShift, setNewShift] = useState({ name: '', start_time: '08:00', end_time: '17:00', grace_minutes: 15, timezone: 'UTC' });
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [usersRes, shiftsRes] = await Promise.all([
+        api.get('/admin/users'),
+        api.get('/admin/shift-templates'),
+      ]);
+      setUsers(usersRes.data);
+      setShifts(shiftsRes.data);
+    } catch {
+      setError('Failed to load data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/admin/users', newUser);
+      setNewUser({ name: '', email: '', password: '', role: 'employee' });
+      setShowCreateUser(false);
+      loadData();
+    } catch (err: any) {
+      setError(err.response?.data || 'Failed to create employee');
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (!confirm('Delete this employee? This cannot be undone.')) return;
+    try {
+      await api.delete(`/admin/users/${id}`);
+      loadData();
+    } catch {
+      setError('Failed to delete employee');
+    }
+  };
+
+  const handleCreateShift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.post('/admin/shift-templates', newShift);
+      setShowCreateShift(false);
+      loadData();
+    } catch {
+      setError('Failed to create shift template');
+    }
+  };
+
+  const handleAssignShift = async (employeeId: string) => {
+    if (!selectedShiftId) return;
+    try {
+      await api.post('/admin/employee-shifts', { employee_id: employeeId, shift_template_id: selectedShiftId });
+      setShowAssignShift(null);
+      setSelectedShiftId('');
+    } catch {
+      setError('Failed to assign shift');
+    }
+  };
+
+  const handleDeleteShift = async (id: string) => {
+    if (!confirm('Delete this shift template?')) return;
+    try {
+      await api.delete(`/admin/shift-templates/${id}`);
+      loadData();
+    } catch {
+      setError('Failed to delete shift');
+    }
+  };
+
+  const roleColor = (role: string) => {
+    if (role === 'super_admin') return 'badge badge-danger';
+    if (role === 'manager') return 'badge badge-warning';
+    return 'badge badge-success';
+  };
+
+  return (
+    <div className="page">
+      {error && <div className="alert-error" onClick={() => setError('')}>{error} ✕</div>}
+
+      {/* Employees Section */}
+      <div className="section-header">
+        <div>
+          <h1>Employees</h1>
+          <p className="text-muted">Manage your team members</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setShowCreateUser(true)}>+ Add Employee</button>
+      </div>
+
+      {showCreateUser && (
+        <div className="modal-overlay" onClick={() => setShowCreateUser(false)}>
+          <div className="modal glass-panel" onClick={e => e.stopPropagation()}>
+            <h3>Add New Employee</h3>
+            <form onSubmit={handleCreateUser}>
+              <div className="input-group">
+                <label className="input-label">Name</label>
+                <input className="input-field" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} required placeholder="Full Name" />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Email</label>
+                <input className="input-field" type="email" value={newUser.email} onChange={e => setNewUser({...newUser, email: e.target.value})} required placeholder="email@example.com" />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Password</label>
+                <input className="input-field" type="password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} required placeholder="Temporary password" />
+              </div>
+              <div className="input-group">
+                <label className="input-label">Role</label>
+                <select className="input-field" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>
+                  <option value="employee">Employee</option>
+                  <option value="manager">Manager</option>
+                  <option value="super_admin">Super Admin</option>
+                </select>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-outline" onClick={() => setShowCreateUser(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Create</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="loading">Loading...</div>
+      ) : (
+        <div className="table-card glass-panel">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Joined</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map(u => (
+                <tr key={u.id}>
+                  <td className="td-name">{u.name}</td>
+                  <td className="text-muted">{u.email}</td>
+                  <td><span className={roleColor(u.role)}>{u.role}</span></td>
+                  <td className="text-muted">{new Date(u.created_at).toLocaleDateString()}</td>
+                  <td>
+                    <div className="action-row">
+                      <button className="btn btn-sm btn-outline" onClick={() => { setShowAssignShift(u.id); setSelectedShiftId(''); }}>
+                        Assign Shift
+                      </button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleDeleteUser(u.id)}>Delete</button>
+                    </div>
+                    {showAssignShift === u.id && (
+                      <div className="assign-shift-inline">
+                        <select className="input-field" value={selectedShiftId} onChange={e => setSelectedShiftId(e.target.value)}>
+                          <option value="">Select shift...</option>
+                          {shifts.map(s => (
+                            <option key={s.id} value={s.id}>{s.name} ({s.start_time} - {s.end_time})</option>
+                          ))}
+                        </select>
+                        <button className="btn btn-primary btn-sm" onClick={() => handleAssignShift(u.id)}>Assign</button>
+                        <button className="btn btn-outline btn-sm" onClick={() => setShowAssignShift(null)}>Cancel</button>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {users.length === 0 && (
+                <tr><td colSpan={5} className="empty-row">No employees yet. Add your first employee!</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Shift Templates Section */}
+      <div className="section-header mt-4">
+        <div>
+          <h2>Shift Templates</h2>
+          <p className="text-muted">Create reusable shift schedules</p>
+        </div>
+        <button className="btn btn-primary" onClick={() => setShowCreateShift(true)}>+ Add Shift</button>
+      </div>
+
+      {showCreateShift && (
+        <div className="modal-overlay" onClick={() => setShowCreateShift(false)}>
+          <div className="modal glass-panel" onClick={e => e.stopPropagation()}>
+            <h3>Create Shift Template</h3>
+            <form onSubmit={handleCreateShift}>
+              <div className="input-group">
+                <label className="input-label">Shift Name</label>
+                <input className="input-field" value={newShift.name} onChange={e => setNewShift({...newShift, name: e.target.value})} required placeholder="Morning Shift" />
+              </div>
+              <div className="form-row">
+                <div className="input-group">
+                  <label className="input-label">Start Time</label>
+                  <input className="input-field" type="time" value={newShift.start_time} onChange={e => setNewShift({...newShift, start_time: e.target.value})} required />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">End Time</label>
+                  <input className="input-field" type="time" value={newShift.end_time} onChange={e => setNewShift({...newShift, end_time: e.target.value})} required />
+                </div>
+              </div>
+              <div className="form-row">
+                <div className="input-group">
+                  <label className="input-label">Grace Period (minutes)</label>
+                  <input className="input-field" type="number" value={newShift.grace_minutes} onChange={e => setNewShift({...newShift, grace_minutes: parseInt(e.target.value)})} required />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Timezone</label>
+                  <input className="input-field" value={newShift.timezone} onChange={e => setNewShift({...newShift, timezone: e.target.value})} placeholder="UTC" required />
+                </div>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-outline" onClick={() => setShowCreateShift(false)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Create Shift</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      <div className="shifts-grid">
+        {shifts.map(s => (
+          <div key={s.id} className="shift-card glass-panel">
+            <div className="shift-card-header">
+              <h4>{s.name}</h4>
+              <button className="btn btn-sm btn-danger" onClick={() => handleDeleteShift(s.id)}>✕</button>
+            </div>
+            <p className="text-muted">{s.start_time} → {s.end_time}</p>
+            <p className="text-muted text-sm">Grace: {s.grace_minutes} mins · {s.timezone}</p>
+          </div>
+        ))}
+        {shifts.length === 0 && <p className="text-muted">No shift templates yet.</p>}
+      </div>
+    </div>
+  );
+};
+
+export default Employees;

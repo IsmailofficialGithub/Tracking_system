@@ -1,0 +1,14 @@
+.search-input {
+  width: 280px;
+}
+
+.live-dot {
+  color: var(--accent-success);
+  animation: pulse 1.5s infinite;
+  font-size: 0.875rem;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

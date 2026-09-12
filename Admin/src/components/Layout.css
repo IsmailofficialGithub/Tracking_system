@@ -1,5 +1,5 @@
 .sidebar {
-  width: 260px;
+  width: 240px;
   display: flex;
   flex-direction: column;
   border-radius: 0;
@@ -10,15 +10,30 @@
 }
 
 .sidebar-header {
-  padding: 2rem 1.5rem;
+  padding: 1.75rem 1.5rem;
   border-bottom: 1px solid var(--border-subtle);
 }
 
+.sidebar-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.logo-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.7);
+}
+
 .sidebar-header h2 {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   color: var(--text-primary);
+  margin: 0;
 }
 
 .sidebar-nav {
