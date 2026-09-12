@@ -57,16 +57,7 @@ pub struct SessionWithEmployee {
     pub status: String,
 }
 
-#[derive(Serialize)]
-pub struct RecordingWithEmployee {
-    pub id: Uuid,
-    pub session_id: Uuid,
-    pub employee_name: String,
-    pub employee_email: String,
-    pub file_path: String,
-    pub size_bytes: i64,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-}
+
 
 pub fn admin_routes() -> Router<AppState> {
     Router::new()
@@ -357,17 +348,25 @@ async fn list_session_logs(
 
 // ---- Recordings ----
 
+#[derive(Serialize)]
+pub struct RecordingWithEmployeeDaily {
+    pub id: String, // composite id
+    pub session_id: String, // composite id alias
+    pub employee_name: String,
+    pub employee_email: String,
+    pub file_path: String,
+    pub size_bytes: i64,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 async fn list_recordings(
     State(state): State<AppState>,
     _auth: AuthUser,
-) -> Result<Json<Vec<RecordingWithEmployee>>, StatusCode> {
-    // We want to return one entry PER SESSION that has recordings, 
-    // aggregating the total size and using the session's start time as created_at.
+) -> Result<Json<Vec<RecordingWithEmployeeDaily>>, StatusCode> {
     let rows = sqlx::query_as::<
         _,
         (
-            Uuid,
-            Uuid,
+            String,
             String,
             String,
             i64,
@@ -376,17 +375,16 @@ async fn list_recordings(
     >(
         r#"
         SELECT 
-            s.id as recording_id, 
-            s.id as session_id, 
+            (u.id::text || '_' || TO_CHAR(DATE(s.check_in_at), 'YYYY-MM-DD')) as id, 
             u.name, 
             u.email, 
             COALESCE(SUM(r.size_bytes), 0)::bigint as size_bytes, 
-            s.check_in_at as created_at
+            MIN(s.check_in_at) as created_at
         FROM public.sessions s
         JOIN public.users u ON s.employee_id = u.id
         JOIN public.recordings r ON r.session_id = s.id
-        GROUP BY s.id, u.name, u.email
-        ORDER BY s.check_in_at DESC
+        GROUP BY u.id, u.name, u.email, DATE(s.check_in_at)
+        ORDER BY created_at DESC
         LIMIT 200
         "#,
     )
@@ -397,13 +395,13 @@ async fn list_recordings(
     let recordings = rows
         .into_iter()
         .map(
-            |(id, session_id, name, email, size_bytes, created_at)| {
-                RecordingWithEmployee {
-                    id, // Using session_id as the ID so the stream endpoint plays the full session!
-                    session_id,
+            |(id, name, email, size_bytes, created_at)| {
+                RecordingWithEmployeeDaily {
+                    id: id.clone(),
+                    session_id: id,
                     employee_name: name,
                     employee_email: email,
-                    file_path: "".to_string(), // not needed by frontend
+                    file_path: "".to_string(),
                     size_bytes,
                     created_at,
                 }

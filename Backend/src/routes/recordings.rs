@@ -89,10 +89,9 @@ use std::time::Duration;
 // Accepts token as query param since <video src> can't set Authorization headers
 async fn stream_recording(
     State(state): State<AppState>,
-    Path(recording_id): Path<Uuid>,
+    Path(recording_id): Path<String>,
     Query(query): Query<StreamQuery>,
 ) -> impl IntoResponse {
-    // Validate token from query param
     let jwt_secret = std::env::var("JWT_SECRET")
         .unwrap_or_else(|_| "super-secret-jwt-token-with-at-least-32-bytes-long".to_string());
 
@@ -113,39 +112,68 @@ async fn stream_recording(
 
     let db = state.db.clone();
 
+    // Check if it's a composite daily ID (employeeUUID_YYYY-MM-DD)
+    let (is_composite, employee_id, date_str) = if recording_id.contains('_') {
+        let parts: Vec<&str> = recording_id.split('_').collect();
+        let emp_id = Uuid::parse_str(parts[0]).unwrap_or_default();
+        (true, Some(emp_id), Some(parts[1].to_string()))
+    } else {
+        (false, None, None)
+    };
+
+    let session_uuid = if !is_composite { Uuid::parse_str(&recording_id).ok() } else { None };
+
     let stream = stream! {
         let mut last_created_at: Option<chrono::DateTime<chrono::Utc>> = None;
         let mut session_ended = false;
         let mut live_header_sent = false;
+        let mut is_first_chunk_ever = true;
         
         loop {
-            let status = sqlx::query_scalar::<_, String>(
-                "SELECT status::text FROM public.sessions WHERE id = $1"
-            )
-            .bind(recording_id)
-            .fetch_optional(&db)
-            .await
-            .unwrap_or(None);
-
-            if let Some(s) = status {
-                if s == "completed" {
+            // Check if active sessions exist
+            if is_composite {
+                let active = sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM public.sessions WHERE employee_id = $1 AND DATE(check_in_at) = $2::date AND check_out_at IS NULL"
+                )
+                .bind(employee_id.unwrap())
+                .bind(date_str.as_ref().unwrap())
+                .fetch_one(&db)
+                .await
+                .unwrap_or(0);
+                if active == 0 { session_ended = true; }
+            } else if let Some(sid) = session_uuid {
+                let status = sqlx::query_scalar::<_, String>(
+                    "SELECT status::text FROM public.sessions WHERE id = $1"
+                )
+                .bind(sid)
+                .fetch_optional(&db)
+                .await
+                .unwrap_or(None);
+                if let Some(s) = status {
+                    if s == "completed" { session_ended = true; }
+                } else {
                     session_ended = true;
                 }
-            } else {
-                session_ended = true;
             }
 
             let is_live_mode = query.live.unwrap_or(false) && !session_ended;
 
             if is_live_mode && !live_header_sent {
                 live_header_sent = true;
-                let first_row = sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                    "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at ASC LIMIT 1"
-                )
-                .bind(recording_id)
-                .fetch_optional(&db)
-                .await
-                .unwrap_or(None);
+                let first_row = if is_composite {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT r.file_path, r.created_at FROM public.recordings r JOIN public.sessions s ON r.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date ORDER BY r.created_at ASC LIMIT 1"
+                    )
+                    .bind(employee_id.unwrap())
+                    .bind(date_str.as_ref().unwrap())
+                    .fetch_optional(&db).await.unwrap_or(None)
+                } else {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at ASC LIMIT 1"
+                    )
+                    .bind(session_uuid.unwrap())
+                    .fetch_optional(&db).await.unwrap_or(None)
+                };
 
                 if let Some((first_path, first_time)) = first_row {
                     if let Ok(mut file) = fs::File::open(&first_path).await {
@@ -159,35 +187,38 @@ async fn stream_recording(
                             }
                         }
                         
-                        // Yield the WebM header
                         if header_len > 0 {
                             yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[..header_len]));
                         }
 
-                        let latest_chunk_time = sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
-                            "SELECT created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at DESC LIMIT 1"
-                        )
-                        .bind(recording_id)
-                        .fetch_optional(&db)
-                        .await
-                        .unwrap_or(None);
+                        let latest_chunk_time = if is_composite {
+                            sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+                                "SELECT r.created_at FROM public.recordings r JOIN public.sessions s ON r.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date ORDER BY r.created_at DESC LIMIT 1"
+                            )
+                            .bind(employee_id.unwrap())
+                            .bind(date_str.as_ref().unwrap())
+                            .fetch_optional(&db).await.unwrap_or(None)
+                        } else {
+                            sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+                                "SELECT created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at DESC LIMIT 1"
+                            )
+                            .bind(session_uuid.unwrap())
+                            .fetch_optional(&db).await.unwrap_or(None)
+                        };
 
                         if let Some(latest) = latest_chunk_time {
                             if latest == first_time {
-                                // Session just started (only 1 chunk exists). Yield the rest of it.
                                 if header_len < buf.len() {
                                     yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[header_len..]));
                                 }
                                 last_created_at = Some(first_time);
                             } else {
-                                // Jump directly to the latest chunk, regardless of how old it is (handles paused sessions/drops)
                                 let skip_time = latest - chrono::Duration::milliseconds(1);
                                 last_created_at = Some(skip_time);
                             }
                         }
                     }
                 } else {
-                    // No chunks uploaded yet. Retry on next loop.
                     live_header_sent = false;
                 }
                 
@@ -198,22 +229,37 @@ async fn stream_recording(
             }
 
             let rows = if let Some(last) = last_created_at {
-                sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                    "SELECT file_path, created_at FROM public.recordings WHERE (session_id = $1 OR id = $1) AND created_at > $2 ORDER BY created_at ASC"
-                )
-                .bind(recording_id)
-                .bind(last)
-                .fetch_all(&db)
-                .await
-                .unwrap_or_default()
+                if is_composite {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT r.file_path, r.created_at FROM public.recordings r JOIN public.sessions s ON r.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date AND r.created_at > $3 ORDER BY r.created_at ASC"
+                    )
+                    .bind(employee_id.unwrap())
+                    .bind(date_str.as_ref().unwrap())
+                    .bind(last)
+                    .fetch_all(&db).await.unwrap_or_default()
+                } else {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT file_path, created_at FROM public.recordings WHERE (session_id = $1 OR id = $1) AND created_at > $2 ORDER BY created_at ASC"
+                    )
+                    .bind(session_uuid.unwrap())
+                    .bind(last)
+                    .fetch_all(&db).await.unwrap_or_default()
+                }
             } else {
-                sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                    "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at ASC"
-                )
-                .bind(recording_id)
-                .fetch_all(&db)
-                .await
-                .unwrap_or_default()
+                if is_composite {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT r.file_path, r.created_at FROM public.recordings r JOIN public.sessions s ON r.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date ORDER BY r.created_at ASC"
+                    )
+                    .bind(employee_id.unwrap())
+                    .bind(date_str.as_ref().unwrap())
+                    .fetch_all(&db).await.unwrap_or_default()
+                } else {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at ASC"
+                    )
+                    .bind(session_uuid.unwrap())
+                    .fetch_all(&db).await.unwrap_or_default()
+                }
             };
 
             let got_new = !rows.is_empty();
@@ -221,10 +267,38 @@ async fn stream_recording(
             for (file_path, created_at) in rows {
                 last_created_at = Some(created_at);
                 if let Ok(mut file) = fs::File::open(&file_path).await {
-                    let mut buf = vec![0; 65536];
-                    while let Ok(n) = file.read(&mut buf).await {
-                        if n == 0 { break; }
-                        yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[..n]));
+                    let mut buf = Vec::new();
+                    file.read_to_end(&mut buf).await.unwrap_or(0);
+
+                    if buf.len() > 4 {
+                        // Detect EBML Header (0x1A 0x45 0xDF 0xA3)
+                        let has_header = buf[0] == 0x1A && buf[1] == 0x45 && buf[2] == 0xDF && buf[3] == 0xA3;
+                        
+                        if has_header {
+                            // Find the first cluster (0x1F 0x43 0xB6 0x75)
+                            let mut cluster_idx = 0;
+                            for i in 0..buf.len().saturating_sub(4) {
+                                if buf[i] == 0x1F && buf[i+1] == 0x43 && buf[i+2] == 0xB6 && buf[i+3] == 0x75 {
+                                    cluster_idx = i;
+                                    break;
+                                }
+                            }
+
+                            if is_first_chunk_ever && !live_header_sent {
+                                // For VOD, keep header for the very first chunk ever streamed
+                                yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf));
+                            } else {
+                                // Strip header! Only send the clusters
+                                if cluster_idx > 0 {
+                                    yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[cluster_idx..]));
+                                }
+                            }
+                        } else {
+                            // Normal chunk, just send it
+                            yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf));
+                        }
+                        
+                        is_first_chunk_ever = false;
                     }
                 }
             }

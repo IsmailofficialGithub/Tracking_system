@@ -113,6 +113,20 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.on('window-set-mini-mode', (event, isMini) => {
+    if (mainWindow) {
+      if (isMini) {
+        mainWindow.setMinimumSize(220, 60);
+        mainWindow.setSize(220, 60);
+        mainWindow.setAlwaysOnTop(true, 'floating');
+      } else {
+        mainWindow.setMinimumSize(400, 600);
+        mainWindow.setSize(450, 700);
+        mainWindow.setAlwaysOnTop(false);
+      }
+    }
+  });
+
   logEvent('App initialization complete');
 });
 
