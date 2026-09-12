@@ -10,11 +10,15 @@ interface Session {
   check_in_at: string;
   check_out_at: string | null;
   status: string;
+  recording_id?: string;
 }
 
 const Dashboard: React.FC = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedLiveSession, setSelectedLiveSession] = useState<Session | null>(null);
+
+  const apiBaseUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:3000';
 
   useEffect(() => {
     const load = () => {
@@ -24,8 +28,7 @@ const Dashboard: React.FC = () => {
         .finally(() => setLoading(false));
     };
     load();
-    // Refresh live data every 30 seconds
-    const interval = setInterval(load, 30000);
+    const interval = setInterval(load, 15000); // 15s refresh
     return () => clearInterval(interval);
   }, []);
 
@@ -48,6 +51,11 @@ const Dashboard: React.FC = () => {
     const h = Math.floor(ms / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
     return `${h}h ${m}m`;
+  };
+
+  const streamUrl = (session: Session) => {
+    const token = localStorage.getItem('admin_token');
+    return `${apiBaseUrl}/api/employee/recordings/stream/${session.id}?token=${token}`;
   };
 
   return (
@@ -80,7 +88,38 @@ const Dashboard: React.FC = () => {
         </Link>
       </div>
 
-      {/* Live Sessions */}
+      {/* Live Sessions Modal for Live Screen View */}
+      {selectedLiveSession && (
+        <div className="modal-overlay" onClick={() => setSelectedLiveSession(null)}>
+          <div className="modal glass-panel" style={{ maxWidth: '720px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="section-header" style={{ marginBottom: '1rem' }}>
+              <div>
+                <h3>📺 Live Screen Stream: {selectedLiveSession.employee_name}</h3>
+                <p className="text-muted text-sm">{selectedLiveSession.employee_email} · Active for {duration(selectedLiveSession.check_in_at)}</p>
+              </div>
+              <button className="btn btn-outline btn-sm" onClick={() => setSelectedLiveSession(null)}>✕ Close</button>
+            </div>
+            
+            <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden', minHeight: '360px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              <video
+                key={selectedLiveSession.id}
+                controls
+                autoPlay
+                style={{ width: '100%', maxHeight: '420px', objectFit: 'contain' }}
+                src={streamUrl(selectedLiveSession)}
+                onError={(e) => {
+                  console.log("Stream video loading or awaiting chunk...", e);
+                }}
+              />
+            </div>
+            <p className="text-muted text-sm" style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+              🔴 Real-time stream feed updates automatically as chunk data uploads from desktop client.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Live Sessions List */}
       <div className="card glass-panel mt-2">
         <div className="section-header" style={{ marginBottom: '1rem' }}>
           <h3>Live Sessions {activeSessions.length > 0 && <span className="live-badge">● {activeSessions.length} active</span>}</h3>
@@ -99,9 +138,12 @@ const Dashboard: React.FC = () => {
                   <span className="td-name">{s.employee_name}</span>
                   <span className="text-muted text-sm">{s.employee_email}</span>
                 </div>
-                <div className="live-session-meta">
+                <div className="live-session-meta" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                   <span className="text-muted text-sm">{duration(s.check_in_at)}</span>
                   <span className={statusBadge(s.status)}>{s.status.replace('_', ' ')}</span>
+                  <button className="btn btn-primary btn-sm" onClick={() => setSelectedLiveSession(s)}>
+                    📺 View Screen
+                  </button>
                 </div>
               </div>
             ))}

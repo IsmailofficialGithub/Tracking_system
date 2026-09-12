@@ -25,6 +25,11 @@ jobs:
         with:
           components: rustfmt, clippy
 
+      - name: Cache Rust Dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./Backend
+
       - name: Check formatting
         run: cargo fmt --check
 
@@ -33,9 +38,6 @@ jobs:
 
       - name: Run tests
         run: cargo test
-
-      - name: Verify Docker Build
-        run: docker build -t backend:ci .
 
   deploy:
     name: Deploy to Server

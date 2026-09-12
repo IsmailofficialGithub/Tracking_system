@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import axios from 'axios';
-import { Lock, Mail, Loader2, Play, Square } from 'lucide-react';
+import { Lock, Mail, Loader2, Play, Square, Pause, RefreshCw } from 'lucide-react';
 import './index.css';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -17,6 +17,7 @@ function App() {
 
 function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout: () => void }) {
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -25,23 +26,11 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
   const startRecording = async () => {
     setError(null);
     try {
-      // 1. Check In via API
-      const checkInRes = await axios.post(`${BACKEND_URL}/api/employee/check-in`, {}, {
-        headers: { Authorization: `Bearer ${sessionToken}` }
-      });
-      const newSessionId = checkInRes.data.session_id;
-      setSessionId(newSessionId);
-
-      // 2. Open Real-time WebSocket connection
-      const wsUrl = BACKEND_URL.replace('http', 'ws');
-      const ws = new WebSocket(`${wsUrl}/api/realtime/ws?token=${sessionToken}`);
-      ws.onopen = () => console.log("WebSocket connected for Real-time presence.");
-      ws.onclose = () => console.log("WebSocket closed.");
-      wsRef.current = ws;
-
-      // 3. Start Screen Capture
+      // 1. MUST FIRST verify screen capture permission BEFORE check-in
       const sourceId = await (window as any).electronAPI.getScreenSource();
-      if (!sourceId) throw new Error("Could not find screen source");
+      if (!sourceId) {
+        throw new Error("Screen sharing permission required. You must share your entire screen to check in.");
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
@@ -57,13 +46,27 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
         } as any
       });
 
+      // 2. Screen capture granted -> Now call Check In API
+      const checkInRes = await axios.post(`${BACKEND_URL}/api/employee/check-in`, {}, {
+        headers: { Authorization: `Bearer ${sessionToken}` }
+      });
+      const newSessionId = checkInRes.data.session_id;
+      setSessionId(newSessionId);
+
+      // 3. Open Real-time WebSocket connection for Admin Live Presence
+      const wsUrl = BACKEND_URL.replace('http', 'ws');
+      const ws = new WebSocket(`${wsUrl}/api/realtime/ws?token=${sessionToken}`);
+      ws.onopen = () => console.log("WebSocket connected for Real-time presence.");
+      ws.onclose = () => console.log("WebSocket closed.");
+      wsRef.current = ws;
+
+      // 4. Start MediaRecorder
       const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
       mediaRecorderRef.current = recorder;
 
       recorder.ondataavailable = async (e) => {
         if (e.data.size > 0 && newSessionId) {
           console.log("Uploading chunk of size:", e.data.size, "bytes");
-          // 4. Upload chunk to Rust server natively
           try {
             await axios.post(
               `${BACKEND_URL}/api/employee/recordings/upload/${newSessionId}`,
@@ -84,6 +87,7 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
       // Request a chunk every 2 minutes (120,000 ms)
       recorder.start(120000); 
       setIsRecording(true);
+      setIsPaused(false);
     } catch (e: any) {
       console.error("Shift Start Error:", e);
       let errMsg = "Failed to start shift.";
@@ -97,6 +101,17 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
         errMsg = e.message;
       }
       setError(errMsg);
+    }
+  };
+
+  const togglePause = () => {
+    if (!mediaRecorderRef.current) return;
+    if (isPaused) {
+      mediaRecorderRef.current.resume();
+      setIsPaused(false);
+    } else {
+      mediaRecorderRef.current.pause();
+      setIsPaused(true);
     }
   };
 
@@ -125,14 +140,21 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
     }
     
     setIsRecording(false);
+    setIsPaused(false);
     setSessionId(null);
   };
 
   return (
     <div className="glass-panel" style={{ width: '320px', textAlign: 'center' }}>
-      <h2 style={{ marginBottom: '1rem' }}>{isRecording ? 'Tracking Active' : 'Dashboard'}</h2>
+      <h2 style={{ marginBottom: '1rem' }}>
+        {isRecording ? (isPaused ? '⏸️ Shift Paused' : '🟢 Tracking Active') : 'Dashboard'}
+      </h2>
       <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-        {isRecording ? 'You are currently checked in and tracking.' : 'Ready to start your shift.'}
+        {isRecording
+          ? isPaused
+            ? 'Tracking is paused. Click Resume to continue.'
+            : 'Screen capture active and streaming.'
+          : 'Entire screen share required to check in.'}
       </p>
       
       {error && (
@@ -146,9 +168,24 @@ function Dashboard({ sessionToken, onLogout }: { sessionToken: string; onLogout:
           <Play size={18} /> Start Shift
         </button>
       ) : (
-        <button onClick={stopRecording} className="btn-primary" style={{ backgroundColor: '#ef4444', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}>
-          <Square size={18} /> End Shift
-        </button>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          <button
+            onClick={togglePause}
+            className="btn-primary"
+            style={{ backgroundColor: isPaused ? '#3b82f6' : '#f59e0b', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+          >
+            {isPaused ? <RefreshCw size={18} /> : <Pause size={18} />}
+            {isPaused ? 'Resume Shift' : 'Pause Shift'}
+          </button>
+          
+          <button
+            onClick={stopRecording}
+            className="btn-primary"
+            style={{ backgroundColor: '#ef4444', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px' }}
+          >
+            <Square size={18} /> End Shift
+          </button>
+        </div>
       )}
       <button onClick={onLogout} style={{ marginTop: '1rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline' }}>
         Log Out
@@ -179,7 +216,6 @@ function Login({ setSessionToken }: { setSessionToken: (token: string) => void }
         }
       );
       
-      // Store token
       const token = res.data.token;
       setSessionToken(token);
       
