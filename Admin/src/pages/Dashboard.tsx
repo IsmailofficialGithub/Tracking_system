@@ -5,6 +5,7 @@ import './Dashboard.css';
 
 interface Session {
   id: string;
+  employee_id: string;
   employee_name: string;
   employee_email: string;
   check_in_at: string;
