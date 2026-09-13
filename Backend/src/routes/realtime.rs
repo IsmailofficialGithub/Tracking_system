@@ -35,8 +35,15 @@ async fn ws_handler(
 async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
     let (mut sender, mut receiver) = socket.split();
 
-    // Mark user as online in memory map
+    // Connection established
     state.online_employees.insert(employee_id, true);
+
+    // Restore interrupted sessions
+    sqlx::query("UPDATE public.sessions SET status = 'on_time' WHERE employee_id = $1 AND check_out_at IS NULL AND status = 'interrupted'")
+        .bind(employee_id)
+        .execute(&state.db)
+        .await
+        .ok();
 
     // Optional: Broadcast to admins here (could use a broadcast channel in AppState in the future)
     let _ = sender
@@ -59,12 +66,11 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
     let session_id = sqlx::query_scalar::<_, Uuid>(
         r#"
         UPDATE public.sessions 
-        SET check_out_at = $1, status = 'interrupted'
-        WHERE employee_id = $2 AND check_out_at IS NULL
+        SET status = 'interrupted'
+        WHERE employee_id = $1 AND check_out_at IS NULL
         RETURNING id
         "#,
     )
-    .bind(now)
     .bind(employee_id)
     .fetch_optional(&state.db)
     .await;
@@ -73,7 +79,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
         Ok(Some(sid)) => {
             println!("Auto check-out successful for employee {}", employee_id);
             // Insert log for timeline
-            sqlx::query("INSERT INTO public.session_logs (session_id, event_type, event_time) VALUES ($1, 'check_out', $2)")
+            sqlx::query("INSERT INTO public.session_logs (session_id, event_type, event_time) VALUES ($1, 'offline', $2)")
                 .bind(sid)
                 .bind(now)
                 .execute(&state.db)

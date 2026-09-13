@@ -17,6 +17,7 @@ use crate::state::AppState;
 #[derive(Deserialize)]
 pub struct StreamQuery {
     pub token: Option<String>,
+    pub live: Option<bool>,
 }
 
 pub fn recordings_routes() -> Router<AppState> {
@@ -125,6 +126,7 @@ async fn stream_recording(
     let stream = stream! {
         let mut last_created_at: Option<chrono::DateTime<chrono::Utc>> = None;
         let mut session_ended = false;
+        let mut live_header_sent = false;
         let mut is_first_chunk_ever = true;
         
         loop {
@@ -154,8 +156,78 @@ async fn stream_recording(
                 }
             }
 
-            // We no longer skip chunks in live mode, as WebM requires contiguous clusters.
-            // The client will rapidly buffer the history and catch up to live naturally.
+            let is_live_mode = query.live.unwrap_or(false) && !session_ended;
+
+            if is_live_mode && !live_header_sent {
+                live_header_sent = true;
+                let first_row = if is_composite {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT r.file_path, r.created_at FROM public.recordings r JOIN public.sessions s ON r.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date ORDER BY r.created_at ASC LIMIT 1"
+                    )
+                    .bind(employee_id.unwrap())
+                    .bind(date_str.as_ref().unwrap())
+                    .fetch_optional(&db).await.unwrap_or(None)
+                } else {
+                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
+                        "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at ASC LIMIT 1"
+                    )
+                    .bind(session_uuid.unwrap())
+                    .fetch_optional(&db).await.unwrap_or(None)
+                };
+
+                if let Some((first_path, first_time)) = first_row {
+                    if let Ok(mut file) = fs::File::open(&first_path).await {
+                        let mut buf = Vec::new();
+                        let _ = file.read_to_end(&mut buf).await;
+                        let mut header_len = buf.len();
+                        for i in 0..buf.len().saturating_sub(4) {
+                            if buf[i] == 0x1F && buf[i+1] == 0x43 && buf[i+2] == 0xB6 && buf[i+3] == 0x75 {
+                                header_len = i;
+                                break;
+                            }
+                        }
+                        
+                        if header_len > 0 {
+                            yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[..header_len]));
+                        }
+
+                        let latest_chunk_time = if is_composite {
+                            sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+                                "SELECT r.created_at FROM public.recordings r JOIN public.sessions s ON r.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date ORDER BY r.created_at DESC LIMIT 1"
+                            )
+                            .bind(employee_id.unwrap())
+                            .bind(date_str.as_ref().unwrap())
+                            .fetch_optional(&db).await.unwrap_or(None)
+                        } else {
+                            sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
+                                "SELECT created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at DESC LIMIT 1"
+                            )
+                            .bind(session_uuid.unwrap())
+                            .fetch_optional(&db).await.unwrap_or(None)
+                        };
+
+                        if let Some(latest) = latest_chunk_time {
+                            if latest == first_time {
+                                if header_len < buf.len() {
+                                    yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[header_len..]));
+                                }
+                                last_created_at = Some(first_time);
+                            } else {
+                                // Jump to latest 30 seconds (fetch last few chunks so we get a keyframe)
+                                let skip_time = latest - chrono::Duration::seconds(30);
+                                last_created_at = Some(skip_time);
+                            }
+                        }
+                    }
+                } else {
+                    live_header_sent = false;
+                }
+                
+                if !live_header_sent {
+                    tokio::time::sleep(Duration::from_millis(1500)).await;
+                }
+                continue;
+            }
 
             let rows = if let Some(last) = last_created_at {
                 if is_composite {
