@@ -21,6 +21,99 @@ interface SessionLog {
   event_time: string;
 }
 
+const LiveVideoPlayer: React.FC<{ streamUrl: string }> = ({ streamUrl }) => {
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const [isVideoLoading, setIsVideoLoading] = useState(true);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    // Use MediaSource API to handle live chunk streaming robustly
+    const mediaSource = new MediaSource();
+    video.src = URL.createObjectURL(mediaSource);
+
+    let abortController = new AbortController();
+
+    mediaSource.addEventListener('sourceopen', async () => {
+      try {
+        // mode = 'sequence' tells the browser to append chunks sequentially, 
+        // ignoring internal timecodes which solves the jump/freeze issue!
+        const sourceBuffer = mediaSource.addSourceBuffer('video/webm; codecs="vp9"');
+        sourceBuffer.mode = 'sequence';
+
+        const response = await fetch(streamUrl, { signal: abortController.signal });
+        if (!response.body) throw new Error("No response body");
+        
+        const reader = response.body.getReader();
+
+        const appendNextChunk = async () => {
+          if (abortController.signal.aborted) return;
+          if (sourceBuffer.updating) {
+            setTimeout(appendNextChunk, 50);
+            return;
+          }
+
+          try {
+            const { done, value } = await reader.read();
+            if (done) {
+              if (mediaSource.readyState === 'open') mediaSource.endOfStream();
+              return;
+            }
+            if (value) {
+              sourceBuffer.appendBuffer(value);
+            }
+          } catch (e) {
+            console.error("Stream read error:", e);
+          }
+        };
+
+        sourceBuffer.addEventListener('updateend', appendNextChunk);
+        appendNextChunk(); // start the loop
+      } catch (err) {
+        console.error("MSE Setup error", err);
+      }
+    });
+
+    return () => {
+      abortController.abort();
+      if (video.src) URL.revokeObjectURL(video.src);
+    };
+  }, [streamUrl]);
+
+  return (
+    <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden', minHeight: '360px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+      {isVideoLoading && (
+        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 10, backdropFilter: 'blur(4px)' }}>
+          <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+          <p style={{ marginTop: '1rem', color: 'white', fontWeight: 500 }}>Connecting to Live Stream...</p>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+      <video
+        ref={videoRef}
+        controls
+        autoPlay
+        style={{ width: '100%', maxHeight: '420px', objectFit: 'contain' }}
+        onLoadStart={() => setIsVideoLoading(true)}
+        onWaiting={() => setIsVideoLoading(true)}
+        onCanPlay={() => setIsVideoLoading(false)}
+        onPlaying={() => setIsVideoLoading(false)}
+        onProgress={(e) => {
+          const vid = e.target as HTMLVideoElement;
+          if (vid.buffered.length > 0) {
+            // Auto-seek logic to keep it near live edge without breaking playback
+            const end = vid.buffered.end(vid.buffered.length - 1);
+            if (end - vid.currentTime > 10) {
+              vid.currentTime = Math.max(0, end - 2);
+            }
+          }
+        }}
+      />
+    </div>
+  );
+};
+
 const Dashboard: React.FC = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -126,37 +219,8 @@ const Dashboard: React.FC = () => {
               <button className="btn btn-outline btn-sm" onClick={() => setSelectedLiveSession(null)}>✕ Close</button>
             </div>
             
-            <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden', minHeight: '360px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-              {isVideoLoading && (
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 10, backdropFilter: 'blur(4px)' }}>
-                  <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-                  <p style={{ marginTop: '1rem', color: 'white', fontWeight: 500 }}>Connecting to Live Stream...</p>
-                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-                </div>
-              )}
-              <video
-                key={selectedLiveSession.id}
-                controls
-                autoPlay
-                style={{ width: '100%', maxHeight: '420px', objectFit: 'contain' }}
-                src={streamUrl(selectedLiveSession)}
-                onLoadStart={() => setIsVideoLoading(true)}
-                onPlaying={() => setIsVideoLoading(false)}
-                onWaiting={() => setIsVideoLoading(true)}
-                onProgress={(e) => {
-                  const vid = e.target as HTMLVideoElement;
-                  if (vid.dataset.seeked !== 'true' && vid.buffered.length > 0) {
-                    vid.dataset.seeked = 'true';
-                    const end = vid.buffered.end(vid.buffered.length - 1);
-                    vid.currentTime = Math.max(0, end - 2);
-                  }
-                }}
-                onCanPlay={() => setIsVideoLoading(false)}
-                onError={(e) => {
-                  console.log("Stream video loading or awaiting chunk...", e);
-                }}
-              />
-            </div>
+            <LiveVideoPlayer streamUrl={streamUrl(selectedLiveSession)} />
+
             <p className="text-muted text-sm" style={{ marginTop: '0.75rem', textAlign: 'center' }}>
               🔴 Real-time stream feed updates automatically as chunk data uploads from desktop client.
             </p>
