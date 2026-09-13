@@ -143,16 +143,15 @@ const Dashboard: React.FC = () => {
                 onLoadStart={() => setIsVideoLoading(true)}
                 onPlaying={() => setIsVideoLoading(false)}
                 onWaiting={() => setIsVideoLoading(true)}
-                onCanPlay={(e) => {
-                  setIsVideoLoading(false);
+                onProgress={(e) => {
                   const vid = e.target as HTMLVideoElement;
-                  // Auto-seek to live edge on first load, leaving 2 seconds buffer so it plays instantly
                   if (vid.dataset.seeked !== 'true' && vid.buffered.length > 0) {
                     vid.dataset.seeked = 'true';
                     const end = vid.buffered.end(vid.buffered.length - 1);
                     vid.currentTime = Math.max(0, end - 2);
                   }
                 }}
+                onCanPlay={() => setIsVideoLoading(false)}
                 onError={(e) => {
                   console.log("Stream video loading or awaiting chunk...", e);
                 }}
