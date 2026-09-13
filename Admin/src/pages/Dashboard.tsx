@@ -146,10 +146,11 @@ const Dashboard: React.FC = () => {
                 onCanPlay={(e) => {
                   setIsVideoLoading(false);
                   const vid = e.target as HTMLVideoElement;
-                  // Auto-seek to live edge on first load
+                  // Auto-seek to live edge on first load, leaving 2 seconds buffer so it plays instantly
                   if (vid.dataset.seeked !== 'true' && vid.buffered.length > 0) {
                     vid.dataset.seeked = 'true';
-                    vid.currentTime = 99999999;
+                    const end = vid.buffered.end(vid.buffered.length - 1);
+                    vid.currentTime = Math.max(0, end - 2);
                   }
                 }}
                 onError={(e) => {
