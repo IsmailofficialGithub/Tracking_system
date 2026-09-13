@@ -91,6 +91,7 @@ interface DashboardProps {
 function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaused, setIsPaused, recordingDuration, setRecordingDuration, toggleMiniMode }: DashboardProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<any>(null);
@@ -105,6 +106,8 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
   }, [isRecording, isPaused]);
 
   const startRecording = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
     setError(null);
     try {
       // 1. MUST FIRST verify screen capture permission BEFORE check-in
@@ -196,11 +199,14 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
         errMsg = e.message;
       }
       setError(errMsg);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const togglePause = async () => {
-    if (!mediaRecorderRef.current || !sessionId) return;
+    if (!mediaRecorderRef.current || !sessionId || isProcessing) return;
+    setIsProcessing(true);
     try {
       if (isPaused) {
         await axios.post(`${BACKEND_URL}/api/employee/resume`, {}, {
@@ -218,10 +224,14 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
     } catch (err) {
       console.error("Failed to toggle pause state", err);
       setError("Failed to pause/resume tracking.");
+    } finally {
+      setIsProcessing(false);
     }
   };
 
   const stopRecording = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
     setError(null);
     // Stop recording engine
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -248,9 +258,11 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
     setIsRecording(false);
     setIsPaused(false);
     setSessionId(null);
+    setIsProcessing(false);
   };
 
   const handleLogout = async () => {
+    if (isProcessing) return;
     if (isRecording) {
       setError("Please end your active shift before logging out.");
       return;
@@ -278,36 +290,44 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
       )}
 
       {!isRecording ? (
-        <button onClick={startRecording} className="btn-primary" style={{ marginTop: '1rem' }}>
-          <Play size={18} fill="currentColor" /> Start Shift
+        <button onClick={startRecording} disabled={isProcessing} className="btn-primary" style={{ marginTop: '1rem', opacity: isProcessing ? 0.7 : 1, cursor: isProcessing ? 'not-allowed' : 'pointer' }}>
+          {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} fill="currentColor" />} 
+          {isProcessing ? 'Starting...' : 'Start Shift'}
         </button>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '1rem' }}>
           <button
             onClick={togglePause}
+            disabled={isProcessing}
             className="btn-primary"
             style={{ 
               background: isPaused ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' : 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-              boxShadow: isPaused ? '0 4px 15px rgba(16,185,129,0.3)' : '0 4px 15px rgba(245,158,11,0.3)'
+              boxShadow: isPaused ? '0 4px 15px rgba(16,185,129,0.3)' : '0 4px 15px rgba(245,158,11,0.3)',
+              opacity: isProcessing ? 0.7 : 1,
+              cursor: isProcessing ? 'not-allowed' : 'pointer'
             }}
           >
-            {isPaused ? <Play size={18} fill="currentColor" /> : <Pause size={18} fill="currentColor" />}
-            {isPaused ? 'Resume Shift' : 'Pause Shift'}
+            {isProcessing ? <Loader2 size={18} className="animate-spin" /> : (isPaused ? <Play size={18} fill="currentColor" /> : <Pause size={18} fill="currentColor" />)}
+            {isProcessing ? 'Processing...' : (isPaused ? 'Resume Shift' : 'Pause Shift')}
           </button>
           
           <button
             onClick={stopRecording}
+            disabled={isProcessing}
             className="btn-primary"
             style={{ 
               background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-              boxShadow: '0 4px 15px rgba(239,68,68,0.3)'
+              boxShadow: '0 4px 15px rgba(239,68,68,0.3)',
+              opacity: isProcessing ? 0.7 : 1,
+              cursor: isProcessing ? 'not-allowed' : 'pointer'
             }}
           >
-            <Square size={18} fill="currentColor" /> End Shift
+            {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Square size={18} fill="currentColor" />}
+            {isProcessing ? 'Ending Shift...' : 'End Shift'}
           </button>
         </div>
       )}
-      <button onClick={handleLogout} style={{ marginTop: '1rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '0.8rem', textDecoration: 'underline' }}>
+      <button onClick={handleLogout} disabled={isProcessing} style={{ marginTop: '1rem', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: isProcessing ? 'not-allowed' : 'pointer', fontSize: '0.8rem', textDecoration: 'underline', opacity: isProcessing ? 0.7 : 1 }}>
         Log Out
       </button>
     </div>
