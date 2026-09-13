@@ -17,7 +17,6 @@ use crate::state::AppState;
 #[derive(Deserialize)]
 pub struct StreamQuery {
     pub token: Option<String>,
-    pub live: Option<bool>,
 }
 
 pub fn recordings_routes() -> Router<AppState> {
@@ -126,7 +125,6 @@ async fn stream_recording(
     let stream = stream! {
         let mut last_created_at: Option<chrono::DateTime<chrono::Utc>> = None;
         let mut session_ended = false;
-        let mut live_header_sent = false;
         let mut is_first_chunk_ever = true;
         
         loop {
