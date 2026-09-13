@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Lock, Mail, Loader2, Play, Square, Pause, RefreshCw, Minus, X, Maximize2 } from 'lucide-react';
+import { Lock, Mail, Loader2, Play, Square, Pause, Minus, X, Maximize2 } from 'lucide-react';
 import './index.css';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
@@ -47,7 +47,7 @@ function App() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
       <div className="titlebar">
         <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>ChronoTrack</div>
-        <div style={{ display: 'flex', gap: '4px', WebkitAppRegion: 'no-drag' }}>
+        <div style={{ display: 'flex', gap: '4px', WebkitAppRegion: 'no-drag' } as any}>
           <button onClick={handleMinimize} className="titlebar-btn">
             <Minus size={16} />
           </button>
@@ -88,7 +88,7 @@ interface DashboardProps {
   toggleMiniMode: (v: boolean) => void;
 }
 
-function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaused, setIsPaused, recordingDuration, setRecordingDuration, toggleMiniMode }: DashboardProps) {
+function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaused, setIsPaused, setRecordingDuration, toggleMiniMode }: DashboardProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
