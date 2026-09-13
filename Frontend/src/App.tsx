@@ -140,7 +140,16 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
       // 3. Open Real-time WebSocket connection for Admin Live Presence
       const wsUrl = BACKEND_URL.replace('http', 'ws');
       const ws = new WebSocket(`${wsUrl}/api/realtime/ws?token=${sessionToken}`);
-      ws.onopen = () => console.log("WebSocket connected for Real-time presence.");
+      ws.onopen = () => {
+        console.log("WebSocket connected for Real-time presence.");
+        // Send heartbeat ping every 30 seconds
+        const pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+          }
+        }, 30000);
+        ws.addEventListener('close', () => clearInterval(pingInterval));
+      };
       ws.onclose = () => console.log("WebSocket closed.");
       wsRef.current = ws;
 

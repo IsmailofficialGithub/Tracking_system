@@ -10,6 +10,8 @@ use axum::{
 };
 use chrono::Utc;
 use futures_util::{sink::SinkExt, stream::StreamExt};
+use std::time::Duration;
+use tokio::time::timeout;
 use uuid::Uuid;
 
 use crate::auth::AuthUser;
@@ -50,10 +52,20 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
         .send(Message::Text("Connected to tracking session".into()))
         .await;
 
-    // Await messages or connection close
-    while let Some(msg) = receiver.next().await {
-        if let Ok(Message::Close(_)) = msg {
-            break;
+    // Await messages or connection close with a 90-second timeout
+    loop {
+        match timeout(Duration::from_secs(90), receiver.next()).await {
+            Ok(Some(Ok(Message::Close(_)))) | Ok(None) | Err(_) => {
+                // Connection closed or timed out
+                break;
+            }
+            Ok(Some(Ok(_msg))) => {
+                // Received ping or other message, just continue
+            }
+            Ok(Some(Err(_))) => {
+                // WebSocket error
+                break;
+            }
         }
     }
 
