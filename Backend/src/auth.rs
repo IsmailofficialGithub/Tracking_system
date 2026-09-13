@@ -25,17 +25,25 @@ where
     type Rejection = AuthError;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        let auth_header = parts
-            .headers
-            .get(axum::http::header::AUTHORIZATION)
-            .and_then(|value| value.to_str().ok())
-            .ok_or(AuthError::MissingCredentials)?;
+        let token_str = if let Some(auth_header) = parts.headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
+            if !auth_header.starts_with("Bearer ") {
+                return Err(AuthError::InvalidToken);
+            }
+            auth_header["Bearer ".len()..].to_string()
+        } else if let Some(query) = parts.uri.query() {
+            let mut found = None;
+            for pair in query.split('&') {
+                if let Some(t) = pair.strip_prefix("token=") {
+                    found = Some(t.to_string());
+                    break;
+                }
+            }
+            found.ok_or(AuthError::MissingCredentials)?
+        } else {
+            return Err(AuthError::MissingCredentials);
+        };
 
-        if !auth_header.starts_with("Bearer ") {
-            return Err(AuthError::InvalidToken);
-        }
-
-        let token = &auth_header["Bearer ".len()..];
+        let token = &token_str;
 
         let jwt_secret = env::var("JWT_SECRET")
             .unwrap_or_else(|_| "super-secret-jwt-token-with-at-least-32-bytes-long".to_string());
