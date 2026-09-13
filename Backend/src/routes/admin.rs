@@ -333,15 +333,35 @@ use crate::models::SessionLog;
 async fn list_session_logs(
     State(state): State<AppState>,
     _auth: AuthUser,
-    Path(id): Path<Uuid>,
+    Path(id): Path<String>,
 ) -> Result<Json<Vec<SessionLog>>, StatusCode> {
-    let logs = sqlx::query_as::<_, SessionLog>(
-        "SELECT * FROM public.session_logs WHERE session_id = $1 ORDER BY event_time ASC"
-    )
-    .bind(id)
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (is_composite, employee_id, date_str) = if id.contains('_') {
+        let parts: Vec<&str> = id.split('_').collect();
+        let emp_id = Uuid::parse_str(parts[0]).unwrap_or_default();
+        (true, Some(emp_id), Some(parts[1].to_string()))
+    } else {
+        (false, None, None)
+    };
+
+    let logs = if is_composite {
+        sqlx::query_as::<_, SessionLog>(
+            "SELECT l.* FROM public.session_logs l JOIN public.sessions s ON l.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date ORDER BY l.event_time ASC"
+        )
+        .bind(employee_id.unwrap())
+        .bind(date_str.as_ref().unwrap())
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+    } else {
+        let session_uuid = Uuid::parse_str(&id).map_err(|_| StatusCode::BAD_REQUEST)?;
+        sqlx::query_as::<_, SessionLog>(
+            "SELECT * FROM public.session_logs WHERE session_id = $1 ORDER BY event_time ASC"
+        )
+        .bind(session_uuid)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+    };
 
     Ok(Json(logs))
 }

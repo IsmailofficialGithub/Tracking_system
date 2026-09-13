@@ -103,7 +103,10 @@ app.whenReady().then(() => {
   });
 
   ipcMain.on('window-minimize', () => {
-    if (mainWindow) mainWindow.minimize();
+    if (mainWindow) {
+      logEvent('User minimized window, hiding to tray');
+      mainWindow.hide();
+    }
   });
 
   ipcMain.on('window-close', () => {

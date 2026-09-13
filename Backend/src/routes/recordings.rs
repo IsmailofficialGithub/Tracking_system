@@ -150,83 +150,14 @@ async fn stream_recording(
                 .await
                 .unwrap_or(None);
                 if let Some(s) = status {
-                    if s == "completed" { session_ended = true; }
+                    if s == "completed" || s == "interrupted" || s == "ended_early" { session_ended = true; }
                 } else {
                     session_ended = true;
                 }
             }
 
-            let is_live_mode = query.live.unwrap_or(false) && !session_ended;
-
-            if is_live_mode && !live_header_sent {
-                live_header_sent = true;
-                let first_row = if is_composite {
-                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                        "SELECT r.file_path, r.created_at FROM public.recordings r JOIN public.sessions s ON r.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date ORDER BY r.created_at ASC LIMIT 1"
-                    )
-                    .bind(employee_id.unwrap())
-                    .bind(date_str.as_ref().unwrap())
-                    .fetch_optional(&db).await.unwrap_or(None)
-                } else {
-                    sqlx::query_as::<_, (String, chrono::DateTime<chrono::Utc>)>(
-                        "SELECT file_path, created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at ASC LIMIT 1"
-                    )
-                    .bind(session_uuid.unwrap())
-                    .fetch_optional(&db).await.unwrap_or(None)
-                };
-
-                if let Some((first_path, first_time)) = first_row {
-                    if let Ok(mut file) = fs::File::open(&first_path).await {
-                        let mut buf = Vec::new();
-                        let _ = file.read_to_end(&mut buf).await;
-                        let mut header_len = buf.len();
-                        for i in 0..buf.len().saturating_sub(4) {
-                            if buf[i] == 0x1F && buf[i+1] == 0x43 && buf[i+2] == 0xB6 && buf[i+3] == 0x75 {
-                                header_len = i;
-                                break;
-                            }
-                        }
-                        
-                        if header_len > 0 {
-                            yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[..header_len]));
-                        }
-
-                        let latest_chunk_time = if is_composite {
-                            sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
-                                "SELECT r.created_at FROM public.recordings r JOIN public.sessions s ON r.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date ORDER BY r.created_at DESC LIMIT 1"
-                            )
-                            .bind(employee_id.unwrap())
-                            .bind(date_str.as_ref().unwrap())
-                            .fetch_optional(&db).await.unwrap_or(None)
-                        } else {
-                            sqlx::query_scalar::<_, chrono::DateTime<chrono::Utc>>(
-                                "SELECT created_at FROM public.recordings WHERE session_id = $1 ORDER BY created_at DESC LIMIT 1"
-                            )
-                            .bind(session_uuid.unwrap())
-                            .fetch_optional(&db).await.unwrap_or(None)
-                        };
-
-                        if let Some(latest) = latest_chunk_time {
-                            if latest == first_time {
-                                if header_len < buf.len() {
-                                    yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf[header_len..]));
-                                }
-                                last_created_at = Some(first_time);
-                            } else {
-                                let skip_time = latest - chrono::Duration::milliseconds(1);
-                                last_created_at = Some(skip_time);
-                            }
-                        }
-                    }
-                } else {
-                    live_header_sent = false;
-                }
-                
-                if !live_header_sent {
-                    tokio::time::sleep(Duration::from_millis(1500)).await;
-                }
-                continue;
-            }
+            // We no longer skip chunks in live mode, as WebM requires contiguous clusters.
+            // The client will rapidly buffer the history and catch up to live naturally.
 
             let rows = if let Some(last) = last_created_at {
                 if is_composite {
@@ -284,7 +215,7 @@ async fn stream_recording(
                                 }
                             }
 
-                            if is_first_chunk_ever && !live_header_sent {
+                            if is_first_chunk_ever {
                                 // For VOD, keep header for the very first chunk ever streamed
                                 yield Ok::<_, std::io::Error>(axum::body::Bytes::copy_from_slice(&buf));
                             } else {

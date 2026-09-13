@@ -27,6 +27,10 @@
   padding: 0;
 }
 
+html {
+  background: transparent !important;
+}
+
 body {
   background: transparent;
   color: var(--text-main);
