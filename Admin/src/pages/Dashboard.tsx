@@ -119,11 +119,9 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [selectedLiveSession, setSelectedLiveSession] = useState<Session | null>(null);
   const [sessionLogs, setSessionLogs] = useState<SessionLog[]>([]);
-  const [isVideoLoading, setIsVideoLoading] = useState(true);
 
   useEffect(() => {
     if (selectedLiveSession) {
-      setIsVideoLoading(true);
       api.get(`/admin/sessions/${selectedLiveSession.id}/logs`)
         .then(r => setSessionLogs(r.data))
         .catch(console.error);
