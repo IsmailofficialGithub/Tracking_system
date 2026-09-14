@@ -126,12 +126,6 @@ const Dashboard: React.FC = () => {
     return `${h}h ${m}m`;
   };
 
-  const streamUrl = (session: Session) => {
-    const token = localStorage.getItem('admin_token');
-    const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-    return `${baseUrl}/employee/recordings/stream/${session.id}?token=${token}&live=true`;
-  };
-
   return (
     <div className="dashboard-container">
       <div className="page-header">
