@@ -51,9 +51,11 @@ function App() {
     );
   }
 
-  if (isMiniMode) {
-    return (
-      <div style={{ height: '100vh', width: '100vw', background: 'transparent', padding: '10px' }}>
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
+      
+      {/* Mini Mode Widget */}
+      <div style={{ display: isMiniMode ? 'block' : 'none', height: '100vh', width: '100vw', background: 'transparent', padding: '10px' }}>
         <div className="mini-widget">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div className="live-dot" style={{ background: isPaused ? '#f59e0b' : 'var(--accent)' }} />
@@ -67,38 +69,37 @@ function App() {
           </button>
         </div>
       </div>
-    );
-  }
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
-      <div className="titlebar">
-        <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>ChronoTrack</div>
-        <div style={{ display: 'flex', gap: '4px', WebkitAppRegion: 'no-drag' } as any}>
-          <button onClick={handleMinimize} className="titlebar-btn">
-            <Minus size={16} />
-          </button>
-          <button onClick={handleClose} className="titlebar-btn">
-            <X size={16} />
-          </button>
+      {/* Main Mode View */}
+      <div style={{ display: isMiniMode ? 'none' : 'flex', flexDirection: 'column', flex: 1 }}>
+        <div className="titlebar">
+          <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>ChronoTrack</div>
+          <div style={{ display: 'flex', gap: '4px', WebkitAppRegion: 'no-drag' } as any}>
+            <button onClick={handleMinimize} className="titlebar-btn">
+              <Minus size={16} />
+            </button>
+            <button onClick={handleClose} className="titlebar-btn">
+              <X size={16} />
+            </button>
+          </div>
         </div>
-      </div>
-      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', paddingBottom: '40px' }}>
-        {sessionToken 
-          ? <Dashboard 
-              backendUrl={backendUrl}
-              sessionToken={sessionToken} 
-              onLogout={() => setSessionToken(null)} 
-              isRecording={isRecording}
-              setIsRecording={setIsRecording}
-              isPaused={isPaused}
-              setIsPaused={setIsPaused}
-              recordingDuration={recordingDuration}
-              setRecordingDuration={setRecordingDuration}
-              toggleMiniMode={toggleMiniMode}
-            />
-          : <Login setSessionToken={setSessionToken} backendUrl={backendUrl} />
-        }
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', paddingBottom: '40px' }}>
+          {sessionToken 
+            ? <Dashboard 
+                backendUrl={backendUrl}
+                sessionToken={sessionToken} 
+                onLogout={() => setSessionToken(null)} 
+                isRecording={isRecording}
+                setIsRecording={setIsRecording}
+                isPaused={isPaused}
+                setIsPaused={setIsPaused}
+                recordingDuration={recordingDuration}
+                setRecordingDuration={setRecordingDuration}
+                toggleMiniMode={toggleMiniMode}
+              />
+            : <Login setSessionToken={setSessionToken} backendUrl={backendUrl} />
+          }
+        </div>
       </div>
     </div>
   );

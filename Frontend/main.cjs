@@ -23,6 +23,7 @@ function createWindow() {
     minHeight: 600,
     frame: false,
     transparent: true,
+    icon: path.join(__dirname, 'build', 'icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       nodeIntegration: false,
@@ -60,7 +61,12 @@ app.whenReady().then(() => {
 
   // Configure System Tray
   const { nativeImage } = require('electron');
-  const icon = nativeImage.createEmpty();
+  let iconPath = path.join(__dirname, 'build', 'icon.png');
+  // Fallback if build directory doesn't exist during dev
+  if (!fs.existsSync(iconPath)) {
+    iconPath = path.join(__dirname, 'public', 'favicon.svg'); 
+  }
+  const icon = nativeImage.createFromPath(iconPath);
   tray = new Tray(icon);
   
   const contextMenu = Menu.buildFromTemplate([
