@@ -24,6 +24,7 @@ pub fn recordings_routes() -> Router<AppState> {
     Router::new()
         .route("/upload/{session_id}", post(upload_chunk))
         .route("/stream/{recording_id}", get(stream_recording))
+        .route("/latest/{recording_id}", get(latest_recording))
 }
 
 async fn upload_chunk(
@@ -214,8 +215,10 @@ async fn stream_recording(
                                 last_created_at = Some(first_time);
                             } else {
                                 // Jump to latest 30 seconds (fetch last few chunks so we get a keyframe)
+                                println!("DEBUG: live skip logic triggered! latest={}, first={}", latest, first_time);
                                 let skip_time = latest - chrono::Duration::seconds(30);
                                 last_created_at = Some(skip_time);
+                                println!("DEBUG: skip_time set to {}", skip_time);
                             }
                         }
                     }
@@ -316,4 +319,51 @@ async fn stream_recording(
 
     let body = Body::from_stream(stream);
     ([(header::CONTENT_TYPE, "video/webm")], body).into_response()
+}
+
+async fn latest_recording(
+    State(state): State<AppState>,
+    Path(recording_id): Path<String>,
+    Query(query): Query<StreamQuery>,
+) -> impl IntoResponse {
+    let db = state.db;
+    
+    let is_composite = recording_id.contains('_');
+    let (employee_id, date_str) = if is_composite {
+        let parts: Vec<&str> = recording_id.split('_').collect();
+        if parts.len() != 2 {
+            return Err(StatusCode::BAD_REQUEST);
+        }
+        (Uuid::parse_str(parts[0]).ok(), Some(parts[1].to_string()))
+    } else {
+        (None, None)
+    };
+
+    let session_uuid = if !is_composite { Uuid::parse_str(&recording_id).ok() } else { None };
+
+    let latest_row = if is_composite {
+        sqlx::query_scalar::<_, String>(
+            "SELECT r.file_path FROM public.recordings r JOIN public.sessions s ON r.session_id = s.id WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date ORDER BY r.created_at DESC LIMIT 1"
+        )
+        .bind(employee_id.unwrap())
+        .bind(date_str.as_ref().unwrap())
+        .fetch_optional(&db).await.unwrap_or(None)
+    } else {
+        sqlx::query_scalar::<_, String>(
+            "SELECT file_path FROM public.recordings WHERE session_id = $1 OR id = $1 ORDER BY created_at DESC LIMIT 1"
+        )
+        .bind(session_uuid.unwrap())
+        .fetch_optional(&db).await.unwrap_or(None)
+    };
+
+    if let Some(file_path) = latest_row {
+        if let Ok(mut file) = fs::File::open(&file_path).await {
+            let mut buf = Vec::new();
+            if file.read_to_end(&mut buf).await.is_ok() {
+                return Ok(([(header::CONTENT_TYPE, "video/webm")], buf).into_response());
+            }
+        }
+    }
+    
+    Err(StatusCode::NOT_FOUND)
 }

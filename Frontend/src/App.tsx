@@ -157,36 +157,80 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
       const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
       mediaRecorderRef.current = recorder;
 
-      recorder.ondataavailable = async (e) => {
-        if (e.data.size > 0 && newSessionId) {
-          console.log("Uploading chunk of size:", e.data.size, "bytes");
+      // In-memory queue to store chunks when internet drops
+      const pendingChunks: Blob[] = [];
+      let isUploading = false;
+
+      const processUploadQueue = async () => {
+        if (isUploading) return;
+        if (pendingChunks.length === 0) return;
+        
+        isUploading = true;
+
+        // Thundering Herd Prevention: 
+        // If we have a large backlog (e.g. > 5 chunks = 50+ seconds offline),
+        // we add a random jitter delay before bursting to the server.
+        if (pendingChunks.length > 5) {
+          const jitter = Math.random() * 30000; // 0 to 30 seconds
+          console.log(`Backlog detected. Adding jitter delay of ${Math.round(jitter/1000)}s before uploading...`);
+          await new Promise(r => setTimeout(r, jitter));
+        }
+
+        while (pendingChunks.length > 0) {
+          const chunk = pendingChunks[0];
           try {
+            console.log(`Uploading queued chunk of size: ${chunk.size} bytes. (${pendingChunks.length} remaining)`);
             await axios.post(
               `${BACKEND_URL}/api/employee/recordings/upload/${newSessionId}`,
-              e.data,
+              chunk,
               {
                 headers: {
                   'Authorization': `Bearer ${sessionToken}`,
                   'Content-Type': 'video/webm'
-                }
+                },
+                timeout: 10000 // 10s timeout so it fails quickly if still offline
               }
             );
+            
+            // Success! Remove the chunk from the queue.
+            pendingChunks.shift();
+
+            // Pacing: Wait 1 second between uploading chunks to prevent hammering the server
+            if (pendingChunks.length > 0) {
+              await new Promise(r => setTimeout(r, 1000));
+            }
           } catch (uploadError) {
-            console.error("Failed to upload chunk", uploadError);
+            console.error("Failed to upload chunk, internet may still be down. Keeping in queue.", uploadError);
+            // Break the loop. We'll try again on the next 10-second chunk generation.
+            break;
           }
+        }
+
+        isUploading = false;
+      };
+
+      recorder.ondataavailable = async (e) => {
+        if (e.data.size > 0 && newSessionId) {
+          pendingChunks.push(e.data);
+          processUploadQueue();
         }
       };
 
-      // Request a chunk every 10 seconds (10,000 ms) for lower latency live streaming
-      recorder.start(10000); 
+      // Instead of starting with a timeslice, we will manually stop and start the 
+      // recorder every 10 seconds. This ensures EVERY chunk is a complete, independently 
+      // playable WebM file (with its own EBML header and keyframe).
+      recorder.start();
       
-      // Force an immediate chunk after 1 second so the backend gets the WebM header instantly.
-      // This allows the Admin portal to start playing the video without waiting 10 seconds.
-      setTimeout(() => {
+      const recordInterval = setInterval(() => {
         if (recorder.state === 'recording') {
-          recorder.requestData();
+          recorder.stop();
+          recorder.start();
         }
-      }, 1000);
+      }, 10000);
+      
+      // Clear the interval when the WebSocket closes (shift ends)
+      ws.addEventListener('close', () => clearInterval(recordInterval));
+
       setIsRecording(true);
       setIsPaused(false);
       setRecordingDuration(0);
