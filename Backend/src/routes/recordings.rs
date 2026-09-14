@@ -324,7 +324,7 @@ async fn stream_recording(
 async fn latest_recording(
     State(state): State<AppState>,
     Path(recording_id): Path<String>,
-    Query(query): Query<StreamQuery>,
+    Query(_query): Query<StreamQuery>,
 ) -> impl IntoResponse {
     let db = state.db;
     
