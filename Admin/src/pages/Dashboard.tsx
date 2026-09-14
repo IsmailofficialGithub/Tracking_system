@@ -42,10 +42,24 @@ const LiveVideoPlayer: React.FC<{ streamUrl: string }> = ({ streamUrl }) => {
         const sourceBuffer = mediaSource.addSourceBuffer('video/webm; codecs="vp9"');
         sourceBuffer.mode = 'sequence';
 
-        const response = await fetch(streamUrl, { signal: abortController.signal });
+        const response = await fetch(streamUrl, { signal: abortController.signal, cache: 'no-store' });
         if (!response.body) throw new Error("No response body");
         
         const reader = response.body.getReader();
+
+        // Ensure we always stay at the live edge, bypassing any internal buffer delays
+        const seekInterval = setInterval(() => {
+          if (!videoRef.current) return;
+          const vid = videoRef.current;
+          if (vid.buffered.length > 0 && !vid.paused) {
+            const end = vid.buffered.end(vid.buffered.length - 1);
+            if (end - vid.currentTime > 3) {
+              vid.currentTime = Math.max(0, end - 1);
+            }
+          }
+        }, 1000);
+
+        abortController.signal.addEventListener('abort', () => clearInterval(seekInterval));
 
         const appendNextChunk = async () => {
           if (abortController.signal.aborted) return;
@@ -99,16 +113,6 @@ const LiveVideoPlayer: React.FC<{ streamUrl: string }> = ({ streamUrl }) => {
         onWaiting={() => setIsVideoLoading(true)}
         onCanPlay={() => setIsVideoLoading(false)}
         onPlaying={() => setIsVideoLoading(false)}
-        onProgress={(e) => {
-          const vid = e.target as HTMLVideoElement;
-          if (vid.buffered.length > 0) {
-            // Auto-seek logic to keep it near live edge without breaking playback
-            const end = vid.buffered.end(vid.buffered.length - 1);
-            if (end - vid.currentTime > 10) {
-              vid.currentTime = Math.max(0, end - 2);
-            }
-          }
-        }}
       />
     </div>
   );
