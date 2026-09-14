@@ -3,14 +3,33 @@ import axios from 'axios';
 import { Lock, Mail, Loader2, Play, Square, Pause, Minus, X, Maximize2 } from 'lucide-react';
 import './index.css';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
+const FALLBACK_BACKEND_URL = (window as any).ENV?.VITE_BACKEND_URL || import.meta.env.VITE_BACKEND_URL;
 
 function App() {
+  const [backendUrl, setBackendUrl] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [isMiniMode, setIsMiniMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const remoteConfigUrl = 'https://raw.githubusercontent.com/IsmailofficialGithub/Tracking_system/main/frontend-config.json';
+        const res = await axios.get(`${remoteConfigUrl}?t=${Date.now()}`);
+        if (res.data && res.data.VITE_BACKEND_URL) {
+          setBackendUrl(res.data.VITE_BACKEND_URL);
+        } else {
+          setBackendUrl(FALLBACK_BACKEND_URL);
+        }
+      } catch (err) {
+        console.warn('Failed to fetch remote config, using local fallback.', err);
+        setBackendUrl(FALLBACK_BACKEND_URL);
+      }
+    };
+    fetchConfig();
+  }, []);
 
   const toggleMiniMode = (mini: boolean) => {
     setIsMiniMode(mini);
@@ -23,6 +42,14 @@ function App() {
   const handleClose = () => {
     (window as any).electronAPI?.close();
   };
+
+  if (!backendUrl) {
+    return (
+      <div style={{ height: '100vh', width: '100vw', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <Loader2 className="animate-spin" size={32} color="var(--accent)" />
+      </div>
+    );
+  }
 
   if (isMiniMode) {
     return (
@@ -59,6 +86,7 @@ function App() {
       <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', padding: '20px', paddingBottom: '40px' }}>
         {sessionToken 
           ? <Dashboard 
+              backendUrl={backendUrl}
               sessionToken={sessionToken} 
               onLogout={() => setSessionToken(null)} 
               isRecording={isRecording}
@@ -69,7 +97,7 @@ function App() {
               setRecordingDuration={setRecordingDuration}
               toggleMiniMode={toggleMiniMode}
             />
-          : <Login setSessionToken={setSessionToken} />
+          : <Login setSessionToken={setSessionToken} backendUrl={backendUrl} />
         }
       </div>
     </div>
@@ -77,6 +105,7 @@ function App() {
 }
 
 interface DashboardProps {
+  backendUrl: string;
   sessionToken: string;
   onLogout: () => void;
   isRecording: boolean;
@@ -88,7 +117,7 @@ interface DashboardProps {
   toggleMiniMode: (v: boolean) => void;
 }
 
-function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaused, setIsPaused, setRecordingDuration, toggleMiniMode }: DashboardProps) {
+function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecording, setIsRecording, isPaused, setIsPaused, setRecordingDuration, toggleMiniMode }: DashboardProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -392,7 +421,7 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
   );
 }
 
-function Login({ setSessionToken }: { setSessionToken: (token: string) => void }) {
+function Login({ setSessionToken, backendUrl: BACKEND_URL }: { setSessionToken: (token: string) => void, backendUrl: string }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

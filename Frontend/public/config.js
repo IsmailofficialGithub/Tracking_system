@@ -1,0 +1,3 @@
+window.ENV = {
+  VITE_BACKEND_URL: "https://api.axiomra.tracking.ismailabbasi.qzz.io"
+};
