@@ -1,79 +1,76 @@
-# name: CI/CD Pipeline
+name: CI/CD Pipeline
 
-# on:
-#   # push:
-#   #   branches:
-#   #     - main
-#   # pull_request:
-#   #   branches:
-#   #     - main
+on:
+  push:
+    branches:
+      - test
 
-# jobs:
-#   test:
-#     name: Test & Lint
-#     runs-on: ubuntu-latest
-#     defaults:
-#       run:
-#         working-directory: ./Backend
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./Backend
 
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-#       - name: Set up Rust
-#         uses: dtolnay/rust-toolchain@stable
-#         with:
-#           components: rustfmt, clippy
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
-#       - name: Cache Rust Dependencies
-#         uses: Swatinem/rust-cache@v2
-#         with:
-#           workspaces: ./Backend
+      - name: Cache Rust Dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ./Backend
 
-#       - name: Check formatting
-#         run: cargo fmt --check
+      - name: Check formatting
+        run: cargo fmt --check
 
-#       - name: Lint with Clippy
-#         run: cargo clippy -- -D warnings
+      - name: Lint with Clippy
+        run: cargo clippy -- -D warnings
 
-#       - name: Run tests
-#         run: cargo test
+      - name: Run tests
+        run: cargo test
 
-#   deploy:
-#     name: Deploy to Server
-#     needs: test
-#     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-#     runs-on: ubuntu-latest
-#     steps:
-#       - name: SSH Remote Deploy
-#         env:
-#           SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-#           HOST: ${{ secrets.HOST }}
-#           USER: ${{ secrets.USER }}
-#           PORT: ${{ secrets.PORT }}
-#         run: |
-#           mkdir -p ~/.ssh
-#           # Restore multiline format if newlines were escaped as literal \n
-#           echo "$SSH_KEY" | sed 's/\\n/\n/g' > ~/.ssh/id_rsa
-#           echo "" >> ~/.ssh/id_rsa
-#           chmod 600 ~/.ssh/id_rsa
+  deploy:
+    name: Deploy to Server
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH Remote Deploy
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          HOST: ${{ secrets.HOST }}
+          USER: ${{ secrets.USER }}
+          PORT: ${{ secrets.PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          # Restore multiline format if newlines were escaped as literal \n
+          echo "$SSH_KEY" | sed 's/\\n/\n/g' > ~/.ssh/id_rsa
+          echo "" >> ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
           
-#           # Try decoding base64 if key was base64 encoded
-#           if ! grep -q "BEGIN" ~/.ssh/id_rsa; then
-#             echo "$SSH_KEY" | base64 -d > ~/.ssh/id_rsa 2>/dev/null || true
-#             chmod 600 ~/.ssh/id_rsa
-#           fi
+          # Try decoding base64 if key was base64 encoded
+          if ! grep -q "BEGIN" ~/.ssh/id_rsa; then
+            echo "$SSH_KEY" | base64 -d > ~/.ssh/id_rsa 2>/dev/null || true
+            chmod 600 ~/.ssh/id_rsa
+          fi
 
-#           ssh -o StrictHostKeyChecking=no -p "$PORT" "$USER@$HOST" '
-#             set -e
-#             if [ -d "$HOME/Tracking_system" ]; then cd "$HOME/Tracking_system";
-#             elif [ -d "$HOME/tracking_system" ]; then cd "$HOME/tracking_system";
-#             elif [ -d "/var/www/Tracking_system" ]; then cd "/var/www/Tracking_system";
-#             elif [ -d "/var/www/tracking_system" ]; then cd "/var/www/tracking_system";
-#             fi
-#             echo "Deploying latest code in directory: $(pwd)"
-#             git fetch --all
-#             git reset --hard origin/main
-#             docker compose up -d --build || docker-compose up -d --build
-#             echo "Deployment successful!"
-#           '
+          ssh -o StrictHostKeyChecking=no -p "$PORT" "$USER@$HOST" '
+            set -e
+            if [ -d "$HOME/Tracking_system" ]; then cd "$HOME/Tracking_system";
+            elif [ -d "$HOME/tracking_system" ]; then cd "$HOME/tracking_system";
+            elif [ -d "/var/www/Tracking_system" ]; then cd "/var/www/Tracking_system";
+            elif [ -d "/var/www/tracking_system" ]; then cd "/var/www/tracking_system";
+            fi
+            echo "Deploying latest code in directory: $(pwd)"
+            git fetch --all
+            git reset --hard origin/main
+            docker compose up -d --build || docker-compose up -d --build
+            echo "Deployment successful!"
+          '
