@@ -95,6 +95,7 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<any>(null);
+  const recordIntervalRef = useRef<any>(null);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -221,15 +222,12 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
       // playable WebM file (with its own EBML header and keyframe).
       recorder.start();
       
-      const recordInterval = setInterval(() => {
+      recordIntervalRef.current = setInterval(() => {
         if (recorder.state === 'recording') {
           recorder.stop();
           recorder.start();
         }
       }, 10000);
-      
-      // Clear the interval when the WebSocket closes (shift ends)
-      ws.addEventListener('close', () => clearInterval(recordInterval));
 
       setIsRecording(true);
       setIsPaused(false);
@@ -286,6 +284,13 @@ function Dashboard({ sessionToken, onLogout, isRecording, setIsRecording, isPaus
     if (isProcessing) return;
     setIsProcessing(true);
     setError(null);
+
+    // Stop recording chunks
+    if (recordIntervalRef.current) {
+      clearInterval(recordIntervalRef.current);
+      recordIntervalRef.current = null;
+    }
+
     // Stop recording engine
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
