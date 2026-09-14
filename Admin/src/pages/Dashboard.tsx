@@ -142,13 +142,17 @@ const Dashboard: React.FC = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const activeSessions = sessions.filter(s => {
-    if (s.check_out_at) return false;
-    const today = new Date().toDateString();
-    return new Date(s.check_in_at).toDateString() === today;
-  }).filter((session, index, self) => 
-    index === self.findIndex((t) => t.employee_id === session.employee_id)
-  );
+  const activeSessions = sessions
+    .filter(s => {
+      if (s.check_out_at) return false;
+      const today = new Date().toDateString();
+      return new Date(s.check_in_at).toDateString() === today;
+    })
+    // Sort descending so the most recent session is first!
+    .sort((a, b) => new Date(b.check_in_at).getTime() - new Date(a.check_in_at).getTime())
+    .filter((session, index, self) => 
+      index === self.findIndex((t) => t.employee_id === session.employee_id)
+    );
   const lateSessions = activeSessions.filter(s => s.status === 'late');
 
   const statusBadge = (status: string) => {
