@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { Lock, Mail, Loader2, Play, Square, Pause, Minus, X, Maximize2 } from 'lucide-react';
 import './index.css';
+import { UpdateChecker } from './components/UpdateChecker';
 
 const FALLBACK_BACKEND_URL = (window as any).ENV?.VITE_BACKEND_URL || import.meta.env.VITE_BACKEND_URL;
 
@@ -53,6 +54,7 @@ function App() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
+      <UpdateChecker />
       
       {/* Mini Mode Widget */}
       <div style={{ display: isMiniMode ? 'block' : 'none', height: '100vh', width: '100vw', background: 'transparent', padding: '10px' }}>

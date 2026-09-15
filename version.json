@@ -1,0 +1,9 @@
+{
+  "current_version": "1.0.0",
+  "minimum_version": "1.0.0",
+  "build_number": 1,
+  "features": [
+    "Initial release with tracking capabilities."
+  ],
+  "bug_fixes": []
+}

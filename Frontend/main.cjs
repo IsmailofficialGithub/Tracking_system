@@ -143,6 +143,10 @@ app.whenReady().then(() => {
     }
   });
 
+  ipcMain.on('open-external-url', (event, url) => {
+    require('electron').shell.openExternal(url);
+  });
+
   logEvent('App initialization complete');
 });
 

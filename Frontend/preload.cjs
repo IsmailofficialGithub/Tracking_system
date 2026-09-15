@@ -4,5 +4,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getScreenSource: () => ipcRenderer.invoke('get-screen-source'),
   minimize: () => ipcRenderer.send('window-minimize'),
   close: () => ipcRenderer.send('window-close'),
-  setMiniMode: (isMini) => ipcRenderer.send('window-set-mini-mode', isMini)
+  setMiniMode: (isMini) => ipcRenderer.send('window-set-mini-mode', isMini),
+  openExternalUrl: (url) => ipcRenderer.send('open-external-url', url)
 });

@@ -40,6 +40,7 @@ async fn main() {
             routes::recordings::recordings_routes(),
         )
         .nest("/api/realtime", routes::realtime::realtime_routes())
+        .nest("/api/config", routes::config::config_routes())
         .with_state(state)
         .layer(tower_http::cors::CorsLayer::permissive());
 
