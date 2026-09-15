@@ -11,7 +11,10 @@ use bcrypt::{DEFAULT_COST, hash};
 use chrono::{NaiveDate, NaiveTime};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
+use axum::response::{IntoResponse, Response};
+use axum::body::Body;
+use axum::http::header;
+use std::io::Write;
 #[derive(Deserialize)]
 pub struct CreateShiftTemplate {
     pub name: String,
@@ -80,6 +83,67 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/sessions/{id}/logs", get(list_session_logs))
         // Recordings
         .route("/recordings", get(list_recordings))
+        .route("/recordings/download/{session_id}", get(download_recording_zip))
+        // Live View
+        .route("/live/{session_id}", get(get_live_screenshot))
+}
+
+async fn get_live_screenshot(
+    Path(session_id): Path<Uuid>,
+    State(state): State<AppState>,
+    _auth: AuthUser,
+) -> Result<String, StatusCode> {
+    if let Some(data) = state.live_screenshots.get(&session_id) {
+        Ok(data.clone())
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
+}
+
+async fn download_recording_zip(
+    Path(session_id): Path<Uuid>,
+    State(state): State<AppState>,
+    _auth: AuthUser,
+) -> Result<Response, StatusCode> {
+    // Fetch employee_id to find the directory
+    let employee_id = sqlx::query_scalar::<_, Uuid>("SELECT employee_id FROM public.sessions WHERE id = $1")
+        .bind(session_id)
+        .fetch_optional(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+        .ok_or(StatusCode::NOT_FOUND)?;
+
+    let dir_path = format!("uploads/recordings/{}/{}", employee_id, session_id);
+    
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let options = zip::write::FileOptions::<()>::default()
+            .compression_method(zip::CompressionMethod::Stored);
+
+        if let Ok(entries) = std::fs::read_dir(&dir_path) {
+            for entry in entries.flatten() {
+                if let Ok(metadata) = entry.metadata() {
+                    if metadata.is_file() {
+                        let file_name = entry.file_name().to_string_lossy().to_string();
+                        if let Ok(content) = std::fs::read(entry.path()) {
+                            let _ = zip.start_file(file_name, options);
+                            let _ = zip.write_all(&content);
+                        }
+                    }
+                }
+            }
+        }
+        zip.finish().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    }
+
+    let body = Body::from(buf);
+    let headers = [
+        (header::CONTENT_TYPE, "application/zip"),
+        (header::CONTENT_DISPOSITION, &format!("attachment; filename=\"session_{}.zip\"", session_id)),
+    ];
+
+    Ok((headers, body).into_response())
 }
 
 // ---- Users ----

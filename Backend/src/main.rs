@@ -1,5 +1,7 @@
 use axum::{Router, routing::get};
 use std::env;
+use std::time::{Duration, SystemTime};
+use std::fs;
 
 mod auth;
 mod db;
@@ -46,6 +48,37 @@ async fn main() {
 
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
+
+    // Spawn 30-day auto-purge background task
+    tokio::spawn(async move {
+        loop {
+            // Wait 24 hours between checks
+            tokio::time::sleep(Duration::from_secs(60 * 60 * 24)).await;
+            println!("Running auto-purge for recordings older than 30 days...");
+            let cutoff = SystemTime::now() - Duration::from_secs(30 * 24 * 60 * 60);
+            
+            // Iterate over all files in uploads/recordings
+            let path = "uploads/recordings";
+            if let Ok(entries) = walkdir::WalkDir::new(path)
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>() 
+            {
+                for entry in entries.into_iter().filter(|e| e.file_type().is_file()) {
+                    if let Ok(metadata) = entry.metadata() {
+                        if let Ok(modified) = metadata.modified() {
+                            if modified < cutoff {
+                                if let Err(e) = fs::remove_file(entry.path()) {
+                                    eprintln!("Failed to delete old recording {:?}: {}", entry.path(), e);
+                                } else {
+                                    println!("Deleted old recording: {:?}", entry.path());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    });
 
     let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("Server running on http://{}", addr);

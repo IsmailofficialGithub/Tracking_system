@@ -83,7 +83,16 @@ const Recordings: React.FC = () => {
                 <h3>{playing.employee_name}</h3>
                 <p className="text-muted text-sm">{new Date(playing.created_at).toLocaleString()} · {formatSize(playing.size_bytes)}</p>
               </div>
-              <button className="btn btn-outline" onClick={() => setPlaying(null)}>✕ Close</button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <a 
+                  className="btn btn-primary" 
+                  href={`${baseUrl}/admin/recordings/download/${playing.session_id}?token=${localStorage.getItem('admin_token')}`}
+                  download
+                >
+                  ⬇ Download Zip
+                </a>
+                <button className="btn btn-outline" onClick={() => setPlaying(null)}>✕ Close</button>
+              </div>
             </div>
             <video
               key={playing.id}

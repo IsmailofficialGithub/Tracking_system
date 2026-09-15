@@ -156,9 +156,9 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
             chromeMediaSource: 'desktop',
             chromeMediaSourceId: sourceId,
             minFrameRate: 1,
-            maxFrameRate: 2,
-            maxWidth: 1280,
-            maxHeight: 720
+            maxFrameRate: 3,
+            maxWidth: 854,
+            maxHeight: 480
           }
         } as any
       });
@@ -174,14 +174,44 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       const wsUrl = BACKEND_URL.replace('http', 'ws');
       const ws = new WebSocket(`${wsUrl}/api/realtime/ws?token=${sessionToken}`);
       ws.onopen = () => {
-        console.log("WebSocket connected for Real-time presence.");
-        // Send heartbeat ping every 30 seconds
+        console.log("WebSocket connected for Real-time presence and live view.");
+        
+        // Ping every 30 seconds
         const pingInterval = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'ping' }));
           }
         }, 30000);
-        ws.addEventListener('close', () => clearInterval(pingInterval));
+        
+        // Start Live View screenshot capture every 3 seconds
+        const videoEl = document.createElement('video');
+        videoEl.srcObject = stream;
+        videoEl.play();
+        const canvas = document.createElement('canvas');
+        canvas.width = 854;
+        canvas.height = 480;
+        
+        const liveViewInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN && videoEl.videoWidth > 0) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+              // Compress aggressively (0.3 quality) to save bandwidth
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
+              ws.send(JSON.stringify({
+                type: 'screenshot',
+                data: dataUrl
+              }));
+            }
+          }
+        }, 3000);
+
+        ws.addEventListener('close', () => {
+          clearInterval(pingInterval);
+          clearInterval(liveViewInterval);
+          videoEl.pause();
+          videoEl.srcObject = null;
+        });
       };
       ws.onclose = () => console.log("WebSocket closed.");
       wsRef.current = ws;
@@ -253,8 +283,8 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       };
 
       // Instead of starting with a timeslice, we will manually stop and start the 
-      // recorder every 10 seconds. This ensures EVERY chunk is a complete, independently 
-      // playable WebM file (with its own EBML header and keyframe).
+      // recorder every 60 seconds (1 minute). This drastically reduces server load 
+      // and guarantees independent playable WebM chunks.
       recorder.start();
       
       recordIntervalRef.current = setInterval(() => {
@@ -262,7 +292,7 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
           recorder.stop();
           recorder.start();
         }
-      }, 10000);
+      }, 60000); // 60 seconds
 
       setIsRecording(true);
       setIsPaused(false);

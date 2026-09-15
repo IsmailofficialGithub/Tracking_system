@@ -59,8 +59,24 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
                 // Connection closed or timed out
                 break;
             }
-            Ok(Some(Ok(_msg))) => {
-                // Received ping or other message, just continue
+            Ok(Some(Ok(msg))) => {
+                if let Message::Text(text) = msg {
+                    if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
+                        if val.get("type").and_then(|t| t.as_str()) == Some("screenshot") {
+                            if let Some(data) = val.get("data").and_then(|d| d.as_str()) {
+                                // Fetch active session
+                                if let Ok(Some(sid)) = sqlx::query_scalar::<_, Uuid>(
+                                    "SELECT id FROM public.sessions WHERE employee_id = $1 AND check_out_at IS NULL ORDER BY check_in_at DESC LIMIT 1"
+                                )
+                                .bind(employee_id)
+                                .fetch_optional(&state.db)
+                                .await {
+                                    state.live_screenshots.insert(sid, data.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Ok(Some(Err(_))) => {
                 // WebSocket error

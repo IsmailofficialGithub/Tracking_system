@@ -22,45 +22,49 @@ interface SessionLog {
 }
 
 const LiveVideoPlayer: React.FC<{ sessionId: string }> = ({ sessionId }) => {
-  const [isVideoLoading, setIsVideoLoading] = useState(true);
-  const [videoSrc, setVideoSrc] = useState<string>('');
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchLatest = () => {
-      const token = localStorage.getItem('admin_token');
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-      // Append a cache-busting timestamp to force the browser to fetch the new file
-      const url = `${baseUrl}/employee/recordings/latest/${sessionId}?token=${token}&t=${Date.now()}`;
-      setVideoSrc(url);
+    let isActive = true;
+    const fetchLatest = async () => {
+      try {
+        const token = localStorage.getItem('admin_token');
+        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+        const res = await fetch(`${baseUrl}/admin/live/${sessionId}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok && isActive) {
+          const text = await res.text();
+          if (text.startsWith('data:image')) {
+            setImageSrc(text);
+          }
+        }
+      } catch (err) {
+        console.error('Failed to fetch live view', err);
+      }
     };
 
-    // Fetch immediately
     fetchLatest();
-
-    // Then fetch every 10 seconds (matching the desktop app's chunk interval)
-    const interval = setInterval(fetchLatest, 10000);
-    return () => clearInterval(interval);
+    const interval = setInterval(fetchLatest, 3000);
+    return () => {
+      isActive = false;
+      clearInterval(interval);
+    };
   }, [sessionId]);
 
   return (
     <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden', minHeight: '360px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-      {isVideoLoading && (
+      {!imageSrc ? (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 10, backdropFilter: 'blur(4px)' }}>
           <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-          <p style={{ marginTop: '1rem', color: 'white', fontWeight: 500 }}>Loading Latest Screen...</p>
+          <p style={{ marginTop: '1rem', color: 'white', fontWeight: 500 }}>Connecting to Live Feed...</p>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
-      )}
-      {videoSrc && (
-        <video
-          src={videoSrc}
-          controls
-          autoPlay
+      ) : (
+        <img
+          src={imageSrc}
+          alt="Live Screen Feed"
           style={{ width: '100%', maxHeight: '420px', objectFit: 'contain' }}
-          onLoadStart={() => setIsVideoLoading(true)}
-          onWaiting={() => setIsVideoLoading(true)}
-          onCanPlay={() => setIsVideoLoading(false)}
-          onPlaying={() => setIsVideoLoading(false)}
         />
       )}
     </div>

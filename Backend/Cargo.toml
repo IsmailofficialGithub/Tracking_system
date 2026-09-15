@@ -23,3 +23,5 @@ uuid = { version = "1.26.0", features = ["serde", "v4"] }
 bcrypt = "0.15.1"
 rustls = { version = "0.23.44", features = ["ring"] }
 tower-http = { version = "0.7.1", features = ["cors"] }
+walkdir = "2.5.0"
+zip = "2.2.0"
