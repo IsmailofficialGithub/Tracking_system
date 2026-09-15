@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Download, Package, Calendar, AlertCircle } from 'lucide-react';
+import { Download, Package, Calendar, AlertCircle, Terminal, Shield, Laptop, ChevronRight, CheckCircle2 } from 'lucide-react';
 import './DownloadTracker.css';
 
 interface ReleaseAsset {
@@ -23,6 +23,7 @@ const DownloadTracker: React.FC = () => {
   const [releases, setReleases] = useState<GitHubRelease[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'downloads' | 'guide'>('downloads');
 
   useEffect(() => {
     const fetchReleases = async () => {
@@ -51,83 +52,205 @@ const DownloadTracker: React.FC = () => {
   const formatDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString(undefined, {
       year: 'numeric',
-      month: 'short',
+      month: 'long',
       day: 'numeric'
     });
   };
 
   return (
-    <div className="page-container fade-in">
-      <div className="page-header" style={{ marginBottom: '30px' }}>
-        <div>
-          <h1 style={{ fontSize: '2rem', marginBottom: '8px' }}>Download Tracker</h1>
-          <p style={{ color: 'var(--text-muted)' }}>Download the latest and previous versions of the employee tracking app.</p>
+    <div className="tracker-page fade-in">
+      <div className="tracker-header">
+        <div className="header-content">
+          <div className="icon-box">
+            <Download size={28} className="icon-gradient" />
+          </div>
+          <div className="header-text">
+            <h1>Tracker Distribution Center</h1>
+            <p>Deploy, manage, and download the Exiomra Employee Tracking agent.</p>
+          </div>
         </div>
       </div>
 
-      <div className="releases-list">
-        {loading ? (
-          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-            <p>Loading releases...</p>
-          </div>
-        ) : error ? (
-          <div className="glass-panel" style={{ textAlign: 'center', padding: '40px', color: '#ef4444' }}>
-            <AlertCircle size={48} style={{ margin: '0 auto 16px auto' }} />
-            <p>{error}</p>
-          </div>
-        ) : releases.length === 0 ? (
-          <div className="glass-panel" style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-            <Package size={48} style={{ margin: '0 auto 16px auto' }} />
-            <p>No releases found for this repository.</p>
-          </div>
-        ) : (
-          releases.map(release => {
-            const exeAsset = release.assets.find(a => a.name.endsWith('.exe'));
-            
-            return (
-              <div key={release.id} className="glass-panel release-card" style={{ marginBottom: '20px', padding: '24px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
-                  <div>
-                    <h2 style={{ fontSize: '1.5rem', marginBottom: '10px' }}>{release.name || release.tag_name}</h2>
-                    <div style={{ display: 'flex', gap: '15px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-                      <span style={{ background: 'var(--accent)', color: 'white', padding: '2px 8px', borderRadius: '4px', fontWeight: 'bold' }}>{release.tag_name}</span>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Calendar size={14} />
-                        {formatDate(release.published_at)}
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {exeAsset ? (
-                    <a 
-                      href={exeAsset.browser_download_url} 
-                      className="btn-primary"
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <Download size={18} />
-                      Download ({formatSize(exeAsset.size)})
-                    </a>
-                  ) : (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#f59e0b', padding: '10px 15px', background: 'rgba(245, 158, 11, 0.1)', borderRadius: '8px' }}>
-                      <AlertCircle size={16} />
-                      <span>No .exe found</span>
-                    </div>
-                  )}
-                </div>
-                
-                {release.body && (
-                  <div style={{ marginTop: '20px', paddingTop: '20px', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    <h3 style={{ fontSize: '1.1rem', marginBottom: '10px', color: 'var(--text-main)' }}>Release Notes</h3>
-                    <div style={{ color: 'var(--text-muted)', lineHeight: '1.6', fontSize: '0.95rem', whiteSpace: 'pre-wrap' }}>
-                      {release.body}
-                    </div>
-                  </div>
-                )}
+      <div className="tabs-container">
+        <button 
+          className={`tab-btn ${activeTab === 'downloads' ? 'active' : ''}`}
+          onClick={() => setActiveTab('downloads')}
+        >
+          <Package size={18} />
+          Available Releases
+        </button>
+        <button 
+          className={`tab-btn ${activeTab === 'guide' ? 'active' : ''}`}
+          onClick={() => setActiveTab('guide')}
+        >
+          <Terminal size={18} />
+          Deployment Guide
+        </button>
+      </div>
+
+      <div className="tab-content">
+        {activeTab === 'downloads' && (
+          <div className="releases-grid">
+            {loading ? (
+              <div className="state-card loading-state">
+                <div className="spinner-modern"></div>
+                <p>Syncing with GitHub Releases...</p>
               </div>
-            );
-          })
+            ) : error ? (
+              <div className="state-card error-state">
+                <AlertCircle size={40} className="error-icon" />
+                <h3>Sync Failed</h3>
+                <p>{error}</p>
+              </div>
+            ) : releases.length === 0 ? (
+              <div className="state-card empty-state">
+                <Package size={40} className="empty-icon" />
+                <h3>No Releases Found</h3>
+                <p>The repository does not currently have any published releases.</p>
+              </div>
+            ) : (
+              releases.map((release, index) => {
+                const exeAsset = release.assets.find(a => a.name.endsWith('.exe'));
+                const isLatest = index === 0;
+                
+                return (
+                  <div key={release.id} className={`release-card-modern ${isLatest ? 'latest-release' : ''}`}>
+                    {isLatest && <div className="latest-badge">Latest Stable</div>}
+                    
+                    <div className="release-card-header">
+                      <div className="release-title-group">
+                        <h2>{release.name || release.tag_name}</h2>
+                        <div className="release-badges">
+                          <span className="version-badge">{release.tag_name}</span>
+                          <span className="date-badge">
+                            <Calendar size={14} />
+                            {formatDate(release.published_at)}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      {exeAsset ? (
+                        <a 
+                          href={exeAsset.browser_download_url} 
+                          className="btn-download-premium"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <div className="btn-icon">
+                            <Download size={18} />
+                          </div>
+                          <div className="btn-text">
+                            <span className="btn-title">Download for Windows</span>
+                            <span className="btn-subtitle">Executable • {formatSize(exeAsset.size)}</span>
+                          </div>
+                        </a>
+                      ) : (
+                        <div className="missing-asset-badge">
+                          <AlertCircle size={16} />
+                          <span>No installer available</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {release.body && (
+                      <div className="release-notes-modern">
+                        <h3 className="notes-title">What's New</h3>
+                        <div className="notes-content-modern">
+                          {release.body.split('\n').map((line, i) => {
+                            if (!line.trim()) return null;
+                            return (
+                              <div key={i} className="note-line">
+                                <ChevronRight size={14} className="note-chevron" />
+                                <span>{line.replace(/^[-*]\s*/, '')}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+
+        {activeTab === 'guide' && (
+          <div className="guide-container">
+            <div className="guide-intro">
+              <h2>Deployment & Installation Guide</h2>
+              <p>Everything you need to successfully deploy the tracking agent to employee machines.</p>
+            </div>
+
+            <div className="guide-grid">
+              <div className="guide-card">
+                <div className="guide-card-icon user-icon">
+                  <Laptop size={24} />
+                </div>
+                <h3>Standard User Installation</h3>
+                <ol className="guide-steps">
+                  <li>
+                    <div className="step-title">Download the latest release</div>
+                    <p>Navigate to the Downloads tab and fetch the latest Windows executable.</p>
+                  </li>
+                  <li>
+                    <div className="step-title">Run the Installer</div>
+                    <p>Double-click the downloaded <code>.exe</code> file.</p>
+                  </li>
+                  <li>
+                    <div className="step-title">Bypass Windows SmartScreen</div>
+                    <p>If prompted by Windows Protect, click <strong>"More info"</strong> and then <strong>"Run anyway"</strong>.</p>
+                  </li>
+                  <li>
+                    <div className="step-title">Authenticate</div>
+                    <p>Upon launch, log in using the credentials provided by the IT administrator.</p>
+                  </li>
+                </ol>
+              </div>
+
+              <div className="guide-card">
+                <div className="guide-card-icon admin-icon">
+                  <Terminal size={24} />
+                </div>
+                <h3>IT Admin Silent Deployment</h3>
+                <p className="admin-intro">For deploying across multiple machines via MDM or Active Directory.</p>
+                <div className="code-block">
+                  <div className="code-header">
+                    <span>Command Prompt / PowerShell</span>
+                  </div>
+                  <pre><code>{`# Run the installer silently with no UI
+"Exiomra Tracking System Setup 1.0.0.exe" /S`}</code></pre>
+                </div>
+                <ul className="admin-features">
+                  <li><CheckCircle2 size={16} /> Installs globally for all users</li>
+                  <li><CheckCircle2 size={16} /> Automatically creates desktop shortcuts</li>
+                  <li><CheckCircle2 size={16} /> Auto-launches silently on system boot</li>
+                </ul>
+              </div>
+
+              <div className="guide-card full-width">
+                <div className="guide-card-icon security-icon">
+                  <Shield size={24} />
+                </div>
+                <h3>Security & Privacy Posture</h3>
+                <p>The Exiomra Tracking System is designed with strict privacy boundaries.</p>
+                <div className="security-grid">
+                  <div className="security-item">
+                    <h4>Shift-Bound Tracking</h4>
+                    <p>Screen recording and activity monitoring are explicitly restricted to active shift hours. No data is collected when off-duty.</p>
+                  </div>
+                  <div className="security-item">
+                    <h4>In-App Updates</h4>
+                    <p>The agent will automatically ping the distribution center and silently patch itself when new updates are deployed.</p>
+                  </div>
+                  <div className="security-item">
+                    <h4>Data Encryption</h4>
+                    <p>All video feeds and keystroke analytics are TLS-encrypted in transit to the secure backend.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
