@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Video, LogOut, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Users, Video, LogOut, ClipboardList, Download } from 'lucide-react';
 import './Layout.css';
 
 const Layout: React.FC = () => {
@@ -38,6 +38,10 @@ const Layout: React.FC = () => {
           <NavLink to="/recordings" className={link}>
             <Video size={18} />
             <span>Recordings</span>
+          </NavLink>
+          <NavLink to="/download-tracker" className={link}>
+            <Download size={18} />
+            <span>Download Tracker</span>
           </NavLink>
         </nav>
         <div className="sidebar-footer">

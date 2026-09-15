@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
 import Recordings from './pages/Recordings';
 import Sessions from './pages/Sessions';
+import DownloadTracker from './pages/DownloadTracker';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const token = localStorage.getItem('admin_token');
@@ -30,6 +31,7 @@ function App() {
           <Route path="employees" element={<Employees />} />
           <Route path="recordings" element={<Recordings />} />
           <Route path="sessions" element={<Sessions />} />
+          <Route path="download-tracker" element={<DownloadTracker />} />
         </Route>
       </Routes>
     </BrowserRouter>
