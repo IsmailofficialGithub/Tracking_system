@@ -5,7 +5,8 @@
   "minimum_build_number": 1,
   "features": [
     "Rebranded to Exiomra Tracking System",
-    "Made mini tracking widget draggable"
+    "Made mini tracking widget draggable",
+    "Added true in-app updater"
   ],
   "bug_fixes": [
     "Improved privacy texts for screen recording"
