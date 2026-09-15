@@ -22,9 +22,13 @@ export function UpdateChecker() {
     features: string[];
     bug_fixes: string[];
     version: string;
+    build_number: number;
+    githubRepoUrl: string;
     releasesUrl: string;
   } | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState(0);
 
   useEffect(() => {
     const checkUpdate = async () => {
@@ -75,6 +79,8 @@ export function UpdateChecker() {
             features: res.data.features || [],
             bug_fixes: res.data.bug_fixes || [],
             version: remoteVersion,
+            build_number: remoteBuildNumber,
+            githubRepoUrl,
             releasesUrl,
           });
           
@@ -92,14 +98,33 @@ export function UpdateChecker() {
     
     // Check every 5 minutes
     const interval = setInterval(checkUpdate, 5 * 60 * 1000);
+
+    // Register download listeners
+    if ((window as any).electronAPI?.onDownloadProgress) {
+      (window as any).electronAPI.onDownloadProgress((percent: number) => {
+        setDownloadProgress(percent);
+      });
+      (window as any).electronAPI.onDownloadError((err: string) => {
+        setIsDownloading(false);
+        setDownloadProgress(0);
+        console.error('Download error:', err);
+        alert('Update download failed: ' + err);
+      });
+    }
+
     return () => clearInterval(interval);
   }, []);
 
   const handleUpdate = () => {
     if (!updateInfo) return;
-    // Open GitHub releases page in external browser
-    if ((window as any).electronAPI?.openExternalUrl) {
-      (window as any).electronAPI.openExternalUrl(updateInfo.releasesUrl);
+    
+    if ((window as any).electronAPI?.startUpdateDownload) {
+      setIsDownloading(true);
+      const tagName = `v${updateInfo.version}-build${updateInfo.build_number}`;
+      const rawExeName = `Exiomra Tracking System Setup ${updateInfo.version}.exe`;
+      const exeName = rawExeName.replace(/ /g, '.');
+      const downloadUrl = `${updateInfo.githubRepoUrl}/releases/download/${tagName}/${encodeURIComponent(exeName)}`;
+      (window as any).electronAPI.startUpdateDownload(downloadUrl);
     } else {
       window.open(updateInfo.releasesUrl, '_blank');
     }
@@ -143,7 +168,7 @@ export function UpdateChecker() {
         
         <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginBottom: '20px', fontSize: '0.95rem' }}>
           Version {updateInfo.version} is now available.
-          {updateInfo.isForced ? ' You must update to continue using ChronoTrack.' : ' We recommend updating for the best experience.'}
+          {updateInfo.isForced ? ' You must update to continue using the system.' : ' We recommend updating for the best experience.'}
         </p>
 
         {/* Features & Bug Fixes UI */}
@@ -185,21 +210,33 @@ export function UpdateChecker() {
           </div>
         )}
 
-        <button 
-          onClick={handleUpdate}
-          className="btn-primary" 
-          style={{ 
-            display: 'flex', 
-            justifyContent: 'center', 
-            alignItems: 'center', 
-            gap: '8px',
-            background: updateInfo.isForced ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-            boxShadow: updateInfo.isForced ? '0 4px 15px rgba(239,68,68,0.3)' : '0 4px 15px rgba(59,130,246,0.3)'
-          }}
-        >
-          <Download size={18} />
-          {updateInfo.isForced ? 'Update Now' : 'Download Update'}
-        </button>
+        {isDownloading ? (
+          <div style={{ width: '100%', marginTop: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px', fontSize: '0.85rem', color: 'var(--text-main)' }}>
+              <span>Downloading Update...</span>
+              <span>{downloadProgress}%</span>
+            </div>
+            <div style={{ width: '100%', height: '8px', background: 'rgba(255,255,255,0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ width: `${downloadProgress}%`, height: '100%', background: 'var(--accent)', transition: 'width 0.2s ease' }} />
+            </div>
+          </div>
+        ) : (
+          <button 
+            onClick={handleUpdate}
+            className="btn-primary" 
+            style={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              gap: '8px',
+              background: updateInfo.isForced ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+              boxShadow: updateInfo.isForced ? '0 4px 15px rgba(239,68,68,0.3)' : '0 4px 15px rgba(59,130,246,0.3)'
+            }}
+          >
+            <Download size={18} />
+            {updateInfo.isForced ? 'Update Now' : 'Download Update'}
+          </button>
+        )}
       </div>
     </div>
   );

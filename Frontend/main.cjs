@@ -147,6 +147,69 @@ app.whenReady().then(() => {
     require('electron').shell.openExternal(url);
   });
 
+  ipcMain.on('start-update-download', (event, url) => {
+    const fs = require('fs');
+    const path = require('path');
+    const https = require('https');
+    const { exec } = require('child_process');
+    
+    const dest = path.join(app.getPath('temp'), 'ExiomraUpdate.exe');
+    logEvent(`Downloading update from ${url} to ${dest}`);
+
+    function downloadFile(fileUrl, fileDest) {
+      const file = fs.createWriteStream(fileDest);
+      https.get(fileUrl, (response) => {
+        if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307) {
+          file.close();
+          return downloadFile(response.headers.location, fileDest);
+        }
+        
+        if (response.statusCode >= 400) {
+          file.close();
+          fs.unlink(fileDest, () => {});
+          return event.sender.send('update-download-error', `Failed to download update: HTTP ${response.statusCode}`);
+        }
+        
+        const len = parseInt(response.headers['content-length'], 10);
+        let downloaded = 0;
+        
+        response.pipe(file);
+        
+        response.on('data', (chunk) => {
+          downloaded += chunk.length;
+          if (len) {
+            const percent = (100.0 * downloaded / len).toFixed(1);
+            event.sender.send('update-download-progress', percent);
+          }
+        });
+        
+        file.on('finish', () => {
+          file.close(() => {
+            logEvent('Download complete, launching installer...');
+            event.sender.send('update-download-progress', 100);
+            
+            // Execute the installer silently if possible, but standard launch is fine too
+            exec(`"${fileDest}"`, (err) => {
+              if (err) logEvent(`Error launching installer: ${err.message}`);
+            });
+            
+            // Quit the app instantly so NSIS can overwrite files
+            setTimeout(() => {
+              app.isQuitting = true;
+              app.quit();
+            }, 1000);
+          });
+        });
+      }).on('error', (err) => {
+        fs.unlink(fileDest, () => {});
+        logEvent(`Download failed: ${err.message}`);
+        event.sender.send('update-download-error', err.message);
+      });
+    }
+
+    downloadFile(url, dest);
+  });
+
   logEvent('App initialization complete');
 });
 
