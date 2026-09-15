@@ -10,6 +10,7 @@ interface VersionInfo {
   current_version: string;
   minimum_version: string;
   build_number: number;
+  minimum_build_number: number;
   features: string[];
   bug_fixes: string[];
 }
@@ -42,6 +43,7 @@ export function UpdateChecker() {
         const remoteVersion = res.data.current_version;
         const minVersion = res.data.minimum_version;
         const remoteBuildNumber = res.data.build_number || 0;
+        const minBuildNumber = res.data.minimum_build_number || 0;
         
         const currentAppVersion = packageJson.version;
         const currentBuildNumber = (packageJson as any).buildNumber || 0;
@@ -49,12 +51,15 @@ export function UpdateChecker() {
         let isUpdateAvailable = false;
         let isForced = false;
 
-        // Check forced update
-        if (semver.lt(currentAppVersion, minVersion)) {
+        // Check forced update (hard update)
+        if (
+          semver.lt(currentAppVersion, minVersion) || 
+          (semver.eq(currentAppVersion, minVersion) && currentBuildNumber < minBuildNumber)
+        ) {
           isUpdateAvailable = true;
           isForced = true;
         } 
-        // Check casual update (version bump OR build number bump)
+        // Check casual update (soft update - version bump OR build number bump)
         else if (
           semver.lt(currentAppVersion, remoteVersion) || 
           (semver.eq(currentAppVersion, remoteVersion) && currentBuildNumber < remoteBuildNumber)
@@ -72,13 +77,22 @@ export function UpdateChecker() {
             version: remoteVersion,
             releasesUrl,
           });
+          
+          // If it's a forced update and the popup was previously dismissed, reset it so it shows up again
+          if (isForced) {
+             setIsDismissed(false);
+          }
         }
       } catch (error) {
         console.error('Failed to check for updates:', error);
       }
     };
 
-    checkUpdate();
+    checkUpdate(); // Check immediately on mount
+    
+    // Check every 5 minutes
+    const interval = setInterval(checkUpdate, 5 * 60 * 1000);
+    return () => clearInterval(interval);
   }, []);
 
   const handleUpdate = () => {
