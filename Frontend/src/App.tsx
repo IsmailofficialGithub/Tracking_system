@@ -187,7 +187,10 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       wsRef.current = ws;
 
       // 4. Start MediaRecorder
-      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm; codecs=vp9' });
+      const recorder = new MediaRecorder(stream, { 
+        mimeType: 'video/webm; codecs=vp9',
+        videoBitsPerSecond: 100000 // 100 kbps to drastically reduce file sizes
+      });
       mediaRecorderRef.current = recorder;
 
       // In-memory queue to store chunks when internet drops
