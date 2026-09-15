@@ -196,15 +196,15 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
             const ctx = canvas.getContext('2d');
             if (ctx) {
               ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-              // Compress aggressively (0.3 quality) to save bandwidth
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.3);
+              // Compress moderately (0.6 quality) for better visuals while keeping bandwidth reasonable
+              const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
               ws.send(JSON.stringify({
                 type: 'screenshot',
                 data: dataUrl
               }));
             }
           }
-        }, 3000);
+        }, 1000); // 1 FPS
 
         ws.addEventListener('close', () => {
           clearInterval(pingInterval);
