@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Download, Package, Calendar, AlertCircle, Terminal, Shield, Laptop, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Download, Package, Calendar, AlertCircle, Terminal, Shield, Laptop } from 'lucide-react';
 import './DownloadTracker.css';
 
 interface ReleaseAsset {
@@ -153,20 +153,20 @@ const DownloadTracker: React.FC = () => {
                     </div>
                     
                     {release.body && (
-                      <div className="release-notes-modern">
-                        <h3 className="notes-title">What's New</h3>
+                      <details className="release-notes-modern">
+                        <summary className="notes-title">What's New</summary>
                         <div className="notes-content-modern">
                           {release.body.split('\n').map((line, i) => {
                             if (!line.trim()) return null;
                             return (
                               <div key={i} className="note-line">
-                                <ChevronRight size={14} className="note-chevron" />
+                                <span className="note-bullet">•</span>
                                 <span>{line.replace(/^[-*]\s*/, '')}</span>
                               </div>
                             );
                           })}
                         </div>
-                      </div>
+                      </details>
                     )}
                   </div>
                 );
@@ -208,25 +208,6 @@ const DownloadTracker: React.FC = () => {
                 </ol>
               </div>
 
-              <div className="guide-card">
-                <div className="guide-card-icon admin-icon">
-                  <Terminal size={24} />
-                </div>
-                <h3>IT Admin Silent Deployment</h3>
-                <p className="admin-intro">For deploying across multiple machines via MDM or Active Directory.</p>
-                <div className="code-block">
-                  <div className="code-header">
-                    <span>Command Prompt / PowerShell</span>
-                  </div>
-                  <pre><code>{`# Run the installer silently with no UI
-"Exiomra Tracking System Setup 1.0.0.exe" /S`}</code></pre>
-                </div>
-                <ul className="admin-features">
-                  <li><CheckCircle2 size={16} /> Installs globally for all users</li>
-                  <li><CheckCircle2 size={16} /> Automatically creates desktop shortcuts</li>
-                  <li><CheckCircle2 size={16} /> Auto-launches silently on system boot</li>
-                </ul>
-              </div>
 
               <div className="guide-card full-width">
                 <div className="guide-card-icon security-icon">
