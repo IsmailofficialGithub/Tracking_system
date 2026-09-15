@@ -164,12 +164,12 @@ const Dashboard: React.FC = () => {
       {selectedLiveSession && (
         <div className="modal-overlay" onClick={() => setSelectedLiveSession(null)}>
           <div className="modal glass-panel" style={{ maxWidth: '720px', width: '90%' }} onClick={e => e.stopPropagation()}>
-            <div className="section-header" style={{ marginBottom: '1rem' }}>
-              <div>
-                <h3>📺 Live Screen Stream: {selectedLiveSession.employee_name}</h3>
-                <p className="text-muted text-sm">{selectedLiveSession.employee_email} · Active for {duration(selectedLiveSession.check_in_at)}</p>
+            <div className="section-header" style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <h3 style={{ wordBreak: 'break-word' }}>📺 Live Screen: {selectedLiveSession.employee_name}</h3>
+                <p className="text-muted text-sm" style={{ wordBreak: 'break-word' }}>{selectedLiveSession.employee_email} · Active: {duration(selectedLiveSession.check_in_at)}</p>
               </div>
-              <button className="btn btn-outline btn-sm" onClick={() => setSelectedLiveSession(null)}>✕ Close</button>
+              <button className="btn btn-outline btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setSelectedLiveSession(null)}>✕ Close</button>
             </div>
             
             <LiveVideoPlayer sessionId={selectedLiveSession.id} />

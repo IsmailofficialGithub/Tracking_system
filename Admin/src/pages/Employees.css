@@ -15,37 +15,7 @@
 
 .mt-4 { margin-top: 3rem; }
 
-.table-card {
-  overflow-x: auto;
-  padding: 0;
-}
 
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.data-table th {
-  padding: 1rem 1.5rem;
-  text-align: left;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.data-table td {
-  padding: 1rem 1.5rem;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  vertical-align: top;
-}
-
-.data-table tr:last-child td { border-bottom: none; }
-
-.data-table tr:hover td {
-  background-color: rgba(255,255,255,0.02);
-}
 
 .td-name { font-weight: 500; }
 
