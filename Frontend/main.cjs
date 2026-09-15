@@ -188,16 +188,19 @@ app.whenReady().then(() => {
             logEvent('Download complete, launching installer...');
             event.sender.send('update-download-progress', 100);
             
-            // Execute the installer silently if possible, but standard launch is fine too
-            exec(`"${fileDest}"`, (err) => {
-              if (err) logEvent(`Error launching installer: ${err.message}`);
+            // Execute the installer fully detached so it survives the app quitting
+            const { spawn } = require('child_process');
+            const child = spawn(fileDest, [], {
+              detached: true,
+              stdio: 'ignore'
             });
+            child.unref();
+            
+            logEvent('Installer launched. Quitting app...');
             
             // Quit the app instantly so NSIS can overwrite files
-            setTimeout(() => {
-              app.isQuitting = true;
-              app.quit();
-            }, 1000);
+            app.isQuitting = true;
+            app.quit();
           });
         });
       }).on('error', (err) => {
