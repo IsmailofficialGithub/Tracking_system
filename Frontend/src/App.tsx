@@ -57,7 +57,7 @@ function App() {
       <UpdateChecker />
       
       {/* Mini Mode Widget */}
-      <div style={{ display: isMiniMode ? 'block' : 'none', height: '100vh', width: '100vw', background: 'transparent', padding: '10px' }}>
+      <div style={{ display: isMiniMode ? 'block' : 'none', height: '100vh', width: '100vw', background: 'transparent', padding: '10px', WebkitAppRegion: 'drag' } as any}>
         <div className="mini-widget">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
             <div className="live-dot" style={{ background: isPaused ? '#f59e0b' : 'var(--accent)' }} />
@@ -66,7 +66,7 @@ function App() {
               {String(recordingDuration % 60).padStart(2, '0')}
             </span>
           </div>
-          <button onClick={() => toggleMiniMode(false)} className="mini-widget-btn" title="Expand">
+          <button onClick={() => toggleMiniMode(false)} className="mini-widget-btn" title="Expand" style={{ WebkitAppRegion: 'no-drag' } as any}>
             <Maximize2 size={14} />
           </button>
         </div>
@@ -75,7 +75,7 @@ function App() {
       {/* Main Mode View */}
       <div style={{ display: isMiniMode ? 'none' : 'flex', flexDirection: 'column', flex: 1 }}>
         <div className="titlebar">
-          <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>ChronoTrack</div>
+          <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>Exiomra Tracking System</div>
           <div style={{ display: 'flex', gap: '4px', WebkitAppRegion: 'no-drag' } as any}>
             <button onClick={handleMinimize} className="titlebar-btn">
               <Minus size={16} />
@@ -146,7 +146,7 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       // 1. MUST FIRST verify screen capture permission BEFORE check-in
       const sourceId = await (window as any).electronAPI.getScreenSource();
       if (!sourceId) {
-        throw new Error("Screen sharing permission required. You must share your entire screen to check in.");
+        throw new Error("Permission required to start your shift.");
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -369,8 +369,8 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
         {isRecording
           ? isPaused
             ? 'Tracking is paused. Click Resume to continue.'
-            : 'Screen capture active and streaming.'
-          : 'Entire screen share required to check in.'}
+            : 'Shift is active.'
+          : 'Ready to start your shift.'}
       </p>
       
       {error && (

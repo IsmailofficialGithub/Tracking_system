@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.0",
   "buildNumber": 1,
   "type": "module",
   "main": "main.cjs",
@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "com.ismailabbasi.chronotrack",
-    "productName": "ChronoTrack",
+    "productName": "Exiomra Tracking System",
     "directories": {
       "output": "release"
     },

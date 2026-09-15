@@ -79,13 +79,13 @@ app.whenReady().then(() => {
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show Dashboard', click: () => mainWindow.show() },
     { type: 'separator' },
-    { label: 'Quit ChronoTrack', click: () => {
+    { label: 'Quit Exiomra Tracking System', click: () => {
       app.isQuitting = true;
       app.quit();
     }}
   ]);
 
-  tray.setToolTip('ChronoTrack');
+  tray.setToolTip('Exiomra Tracking System');
   tray.setContextMenu(contextMenu);
 
   // When double clicking tray, show the window

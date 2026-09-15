@@ -1,8 +1,13 @@
 {
-  "current_version": "0.0.0",
+  "current_version": "1.1.0",
   "minimum_version": "1.0.0",
   "build_number": 1,
   "minimum_build_number": 1,
-  "features": [],
-  "bug_fixes": []
+  "features": [
+    "Rebranded to Exiomra Tracking System",
+    "Made mini tracking widget draggable"
+  ],
+  "bug_fixes": [
+    "Improved privacy texts for screen recording"
+  ]
 }
