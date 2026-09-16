@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import axios from 'axios';
-import { Lock, Mail, Loader2, Play, Square, Pause, Minus, X, Maximize2 } from 'lucide-react';
+import { Lock, Mail, Loader2, Play, Square, Pause, Minus, X, Eye, EyeOff } from 'lucide-react';
 import './index.css';
 import { UpdateChecker } from './components/UpdateChecker';
 
@@ -99,10 +99,24 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [interruptedSession, setInterruptedSession] = useState<{ id: string, status: string } | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<any>(null);
   const recordIntervalRef = useRef<any>(null);
+
+  useEffect(() => {
+    // Check for interrupted/active session on load
+    axios.get(`${BACKEND_URL}/api/employee/current-session`, {
+      headers: { Authorization: `Bearer ${sessionToken}` }
+    })
+    .then(res => {
+      if (res.data && res.data.session_id) {
+        setInterruptedSession({ id: res.data.session_id, status: res.data.status });
+      }
+    })
+    .catch(console.error);
+  }, [BACKEND_URL, sessionToken]);
 
   useEffect(() => {
     if (isRecording && !isPaused) {
@@ -272,6 +286,7 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       setIsRecording(true);
       setIsPaused(false);
       setRecordingDuration(0);
+      setInterruptedSession(null); // Clear interrupted state once successfully resumed
     } catch (e: any) {
       console.error("Shift Start Error:", e);
       let errMsg = "Failed to start shift.";
@@ -373,7 +388,9 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
           ? isPaused
             ? 'Attendance is paused. Click Resume to continue.'
             : 'Shift is active.'
-          : 'Ready to start your shift.'}
+          : interruptedSession
+            ? 'Your shift was interrupted. Please resume.'
+            : 'Ready to start your shift.'}
       </p>
       
       {error && (
@@ -385,7 +402,7 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       {!isRecording ? (
         <button onClick={startRecording} disabled={isProcessing} className="btn-primary" style={{ marginTop: '1rem', opacity: isProcessing ? 0.7 : 1, cursor: isProcessing ? 'not-allowed' : 'pointer' }}>
           {isProcessing ? <Loader2 size={18} className="animate-spin" /> : <Play size={18} fill="currentColor" />} 
-          {isProcessing ? 'Starting...' : 'Start Shift'}
+          {isProcessing ? 'Starting...' : (interruptedSession ? 'Resume Interrupted Shift' : 'Start Shift')}
         </button>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '1rem' }}>
@@ -430,8 +447,16 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
 function Login({ setSessionToken, backendUrl: BACKEND_URL }: { setSessionToken: (token: string) => void, backendUrl: string }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('saved_email');
+    const savedPassword = localStorage.getItem('saved_password');
+    if (savedEmail) setEmail(savedEmail);
+    if (savedPassword) setPassword(savedPassword);
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -451,6 +476,8 @@ function Login({ setSessionToken, backendUrl: BACKEND_URL }: { setSessionToken: 
       
       const token = res.data.token;
       setSessionToken(token);
+      localStorage.setItem('saved_email', email);
+      localStorage.setItem('saved_password', password);
       
     } catch (err: any) {
       setError(err.response?.data?.error || 'Invalid credentials.');
@@ -488,14 +515,21 @@ function Login({ setSessionToken, backendUrl: BACKEND_URL }: { setSessionToken: 
         <div style={{ position: 'relative' }}>
           <Lock size={18} style={{ position: 'absolute', left: '12px', top: '14px', color: 'var(--text-muted)' }} />
           <input 
-            type="password" 
+            type={showPassword ? "text" : "password"} 
             className="input-field" 
             placeholder="Password"
-            style={{ paddingLeft: '40px' }}
+            style={{ paddingLeft: '40px', paddingRight: '40px' }}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required 
           />
+          <button 
+            type="button" 
+            onClick={() => setShowPassword(!showPassword)}
+            style={{ position: 'absolute', right: '12px', top: '14px', background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
+          >
+            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
         </div>
         <button type="submit" className="btn-primary" disabled={loading} style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', opacity: loading ? 0.7 : 1 }}>
           {loading ? <Loader2 size={18} className="animate-spin" /> : 'Sign In'}

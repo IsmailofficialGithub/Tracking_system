@@ -22,6 +22,12 @@ pub struct MyShiftResponse {
     pub shift_template: ShiftTemplate,
 }
 
+#[derive(Serialize)]
+pub struct CurrentSessionResponse {
+    pub session_id: Uuid,
+    pub status: String,
+}
+
 pub fn employee_routes() -> Router<AppState> {
     Router::new()
         .route("/check-in", post(check_in))
@@ -29,6 +35,7 @@ pub fn employee_routes() -> Router<AppState> {
         .route("/pause", post(pause))
         .route("/resume", post(resume))
         .route("/my-shift", get(my_shift))
+        .route("/current-session", get(current_session))
 }
 
 // Auto-look up the employee's assigned shift and check in
@@ -81,6 +88,15 @@ async fn check_in(
         // Log resume event
         sqlx::query(
             "INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'resume')"
+        )
+        .bind(session_id)
+        .execute(&state.db)
+        .await
+        .ok();
+
+        // Clear interrupted status if present
+        sqlx::query(
+            "UPDATE public.sessions SET status = 'on_time' WHERE id = $1 AND status = 'interrupted'"
         )
         .bind(session_id)
         .execute(&state.db)
@@ -279,4 +295,34 @@ async fn my_shift(
     Ok(Json(MyShiftResponse {
         shift_template: shift,
     }))
+}
+
+async fn current_session(
+    State(state): State<AppState>,
+    auth: AuthUser,
+) -> Result<Json<Option<CurrentSessionResponse>>, (StatusCode, String)> {
+    let employee_id = Uuid::parse_str(&auth.0.sub)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "Invalid user ID".to_string()))?;
+
+    let session = sqlx::query_as::<_, (Uuid, Option<String>)>(
+        r#"
+        SELECT id, status::text as status
+        FROM public.sessions 
+        WHERE employee_id = $1 AND check_out_at IS NULL
+        LIMIT 1
+        "#,
+    )
+    .bind(employee_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if let Some((id, status)) = session {
+        Ok(Json(Some(CurrentSessionResponse {
+            session_id: id,
+            status: status.unwrap_or_default(),
+        })))
+    } else {
+        Ok(Json(None))
+    }
 }
