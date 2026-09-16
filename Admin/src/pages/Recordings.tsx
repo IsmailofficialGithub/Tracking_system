@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import './Recordings.css';
 
@@ -20,6 +21,11 @@ interface SessionLog {
 }
 
 const Recordings: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const searchParams = new URLSearchParams(location.search);
+  const employeeId = searchParams.get('employee_id');
+
   const [recordings, setRecordings] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [playing, setPlaying] = useState<Recording | null>(null);
@@ -41,11 +47,14 @@ const Recordings: React.FC = () => {
 
   useEffect(() => {
     setLoading(true);
-    api.get(`/admin/recordings?days=${timeFilter}`)
+    let url = `/admin/recordings?days=${timeFilter}`;
+    if (employeeId) url += `&employee_id=${employeeId}`;
+
+    api.get(url)
       .then(r => setRecordings(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [timeFilter]);
+  }, [timeFilter, employeeId]);
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -66,10 +75,19 @@ const Recordings: React.FC = () => {
     <div className="page">
       <div className="section-header">
         <div>
-          <h1>Recordings</h1>
+          <h1>{employeeId ? 'Employee Recordings' : 'All Recordings'}</h1>
           <p className="text-muted">Browse and playback employee screen recordings</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          {employeeId && (
+            <button 
+              className="btn btn-outline" 
+              onClick={() => navigate('/recordings')} 
+              style={{ marginRight: '10px' }}
+            >
+              Clear Filter
+            </button>
+          )}
           <select 
             className="input-field" 
             value={timeFilter} 

@@ -511,6 +511,7 @@ pub struct RecordingWithEmployeeDaily {
 #[derive(Deserialize)]
 pub struct RecordingsFilter {
     pub days: Option<u32>,
+    pub employee_id: Option<Uuid>,
 }
 
 async fn list_recordings(
@@ -519,6 +520,7 @@ async fn list_recordings(
     Query(filter): Query<RecordingsFilter>,
 ) -> Result<Json<Vec<RecordingWithEmployeeDaily>>, StatusCode> {
     let days = filter.days.unwrap_or(0);
+    let emp_id = filter.employee_id;
 
     let rows = if days > 0 {
         sqlx::query_as::<
@@ -542,12 +544,14 @@ async fn list_recordings(
             JOIN public.users u ON s.employee_id = u.id
             JOIN public.recordings r ON r.session_id = s.id
             WHERE s.check_in_at > NOW() - ($1::int * interval '1 day')
+              AND ($2::uuid IS NULL OR s.employee_id = $2)
             GROUP BY u.id, u.name, u.email, DATE(s.check_in_at)
             ORDER BY created_at DESC
             LIMIT 200
             "#,
         )
         .bind(days as i32)
+        .bind(emp_id)
         .fetch_all(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
@@ -572,11 +576,13 @@ async fn list_recordings(
             FROM public.sessions s
             JOIN public.users u ON s.employee_id = u.id
             JOIN public.recordings r ON r.session_id = s.id
+            WHERE ($1::uuid IS NULL OR s.employee_id = $1)
             GROUP BY u.id, u.name, u.email, DATE(s.check_in_at)
             ORDER BY created_at DESC
             LIMIT 200
             "#,
         )
+        .bind(emp_id)
         .fetch_all(&state.db)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?

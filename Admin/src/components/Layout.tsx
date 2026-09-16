@@ -17,10 +17,15 @@ const Layout: React.FC = () => {
     <div className="app-container">
       <aside className="sidebar glass-panel">
         <div className="sidebar-header">
-          <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <img src="/logo.svg" alt="Axiomra Logo" style={{ width: '32px', height: '32px', borderRadius: '8px' }} onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.nextElementSibling!.removeAttribute('style'); }} />
-            <div className="logo-dot" style={{ display: 'none' }} />
-            <h2>Axiomra Admin</h2>
+          <div className="sidebar-logo" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+            <div style={{ width: '100%', height: '60px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <img 
+                src="/logo.png" 
+                alt="Axiomra Logo" 
+                style={{ width: '180px', height: 'auto', filter: 'invert(1) hue-rotate(180deg)' }} 
+                onError={(e) => { e.currentTarget.style.display = 'none'; }} 
+              />
+            </div>
           </div>
         </div>
         <nav className="sidebar-nav">

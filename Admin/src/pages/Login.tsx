@@ -31,7 +31,14 @@ const Login: React.FC = () => {
   return (
     <div className="login-container">
       <div className="login-card glass-panel">
-        <div className="login-header">
+        <div className="login-header" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <div style={{ width: '240px', height: '80px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+            <img 
+              src="/logo.png" 
+              alt="Axiomra Logo" 
+              style={{ width: '240px', height: 'auto', filter: 'invert(1) hue-rotate(180deg)' }} 
+            />
+          </div>
           <h1>Admin Portal</h1>
           <p className="text-muted">Enter your credentials to access the dashboard</p>
         </div>

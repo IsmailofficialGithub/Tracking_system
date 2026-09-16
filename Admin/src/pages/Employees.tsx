@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MoreVertical, History, Video, Lock, Trash2, CalendarCheck } from 'lucide-react';
+import { MoreVertical, History, Video, Lock, Trash2, CalendarCheck, List } from 'lucide-react';
 import api from '../api/axios';
 import './Employees.css';
 
@@ -244,7 +244,7 @@ const Employees: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {users.map(u => (
+              {users.map((u, index) => (
                 <tr key={u.id}>
                   <td className="td-name">{u.name}</td>
                   <td className="text-muted">{u.email}</td>
@@ -257,23 +257,37 @@ const Employees: React.FC = () => {
                       </button>
                       
                       {/* 3-Dot Menu */}
-                      <button className="btn btn-icon" onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === u.id ? null : u.id); }}>
-                        <MoreVertical size={16} />
+                      <button 
+                        className="btn" 
+                        style={{ background: 'transparent', border: 'none', padding: '4px' }} 
+                        onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === u.id ? null : u.id); }}
+                      >
+                        <MoreVertical size={20} style={{ color: 'var(--text-secondary)' }} />
                       </button>
 
                       {activeMenuId === u.id && (
-                        <div className="dropdown-menu glass-panel" style={{ position: 'absolute', top: '100%', right: '0', zIndex: 10, display: 'flex', flexDirection: 'column', minWidth: '160px', padding: '8px 0', gap: '4px' }}>
-                          <button className="dropdown-item" onClick={() => navigate(`/employees/${u.id}/history`)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
-                            <History size={14} /> History
+                        <div 
+                          className="dropdown-menu-solid"
+                          style={{
+                            ...(index >= users.length - 2 && users.length > 3 
+                              ? { bottom: '100%', top: 'auto', marginBottom: '8px' } 
+                              : { top: '100%', bottom: 'auto', marginTop: '8px' })
+                          }}
+                        >
+                          <button className="dropdown-item-solid" onClick={() => navigate(`/employees/${u.id}/history`, { state: { employeeName: u.name } })}>
+                            <History size={14} /> Detailed History
                           </button>
-                          <button className="dropdown-item" onClick={() => { setActiveMenuId(null); navigate('/recordings'); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                          <button className="dropdown-item-solid" onClick={() => { setActiveMenuId(null); navigate(`/sessions?employee_id=${u.id}`); }}>
+                            <List size={14} /> Session Logs
+                          </button>
+                          <button className="dropdown-item-solid" onClick={() => { setActiveMenuId(null); navigate(`/recordings?employee_id=${u.id}`); }}>
                             <Video size={14} /> Recordings
                           </button>
-                          <button className="dropdown-item" onClick={() => { setShowChangePasswordId(u.id); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                          <button className="dropdown-item-solid" onClick={() => { setShowChangePasswordId(u.id); setActiveMenuId(null); }}>
                             <Lock size={14} /> Change Password
                           </button>
                           <hr style={{ borderColor: 'rgba(255,255,255,0.1)', margin: '4px 0' }} />
-                          <button className="dropdown-item" onClick={() => { handleDeleteUser(u.id); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'transparent', border: 'none', color: '#ef4444', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                          <button className="dropdown-item-solid" onClick={() => { handleDeleteUser(u.id); setActiveMenuId(null); }} style={{ color: '#ef4444' }}>
                             <Trash2 size={14} /> Delete
                           </button>
                         </div>

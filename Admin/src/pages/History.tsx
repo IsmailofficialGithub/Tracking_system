@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
 import api from '../api/axios';
 
@@ -23,6 +23,7 @@ interface SessionLog {
 const History: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,15 +82,21 @@ const History: React.FC = () => {
 
   if (loading) return <div className="page"><div className="loading">Loading history...</div></div>;
 
-  const employeeName = sessions.length > 0 ? sessions[0].employee_name : 'Employee';
+  const passedName = location.state?.employeeName as string | undefined;
+  const employeeName = sessions.length > 0 ? sessions[0].employee_name : (passedName || 'Employee');
 
   return (
     <div className="page">
       {error && <div className="alert-error" onClick={() => setError('')}>{error} ✕</div>}
       
       <div className="section-header" style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        <button className="btn btn-icon" onClick={() => navigate('/employees')} title="Back to Employees">
-          <ArrowLeft size={20} />
+        <button 
+          className="btn" 
+          style={{ background: 'transparent', border: 'none', padding: '4px' }} 
+          onClick={() => navigate('/employees')} 
+          title="Back to Employees"
+        >
+          <ArrowLeft size={24} style={{ color: 'var(--text-secondary)' }} />
         </button>
         <div>
           <h1>{employeeName}'s History</h1>
@@ -123,8 +130,8 @@ const History: React.FC = () => {
                     <td className="text-muted">{checkOutTime}</td>
                     <td><span className={statusColor(s.status)}>{s.status.replace('_', ' ')}</span></td>
                     <td>
-                      <button className="btn btn-icon" style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)' }}>
-                        {isExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                      <button className="btn" style={{ background: 'transparent', border: 'none', padding: '4px', color: 'var(--text-muted)' }}>
+                        {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                       </button>
                     </td>
                   </tr>

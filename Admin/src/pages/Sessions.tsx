@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import './Sessions.css';
 
@@ -14,16 +15,25 @@ interface Session {
 }
 
 const Sessions: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const searchParams = new URLSearchParams(location.search);
+  const employeeId = searchParams.get('employee_id');
+
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
 
   useEffect(() => {
-    api.get('/admin/sessions')
+    setLoading(true);
+    let url = '/admin/sessions';
+    if (employeeId) url += `?employee_id=${employeeId}`;
+
+    api.get(url)
       .then(r => setSessions(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [employeeId]);
 
   const filtered = sessions.filter(s =>
     s.employee_name.toLowerCase().includes(filter.toLowerCase()) ||
@@ -54,15 +64,25 @@ const Sessions: React.FC = () => {
     <div className="page">
       <div className="section-header">
         <div>
-          <h1>Session Logs</h1>
+          <h1>{employeeId ? 'Employee Session Logs' : 'Session Logs'}</h1>
           <p className="text-muted">All employee check-in / check-out history</p>
         </div>
-        <input
-          className="input-field search-input"
-          placeholder="Filter by name or status..."
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-        />
+        <div style={{ display: 'flex', gap: '10px' }}>
+          {employeeId && (
+            <button 
+              className="btn btn-outline" 
+              onClick={() => navigate('/sessions')} 
+            >
+              Clear Filter
+            </button>
+          )}
+          <input
+            className="input-field search-input"
+            placeholder="Filter by name or status..."
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+          />
+        </div>
       </div>
 
       {loading ? (
