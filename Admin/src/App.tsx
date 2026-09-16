@@ -7,6 +7,7 @@ import Employees from './pages/Employees';
 import Recordings from './pages/Recordings';
 import Sessions from './pages/Sessions';
 import DownloadTracker from './pages/DownloadTracker';
+import History from './pages/History';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const token = localStorage.getItem('admin_token');
@@ -29,6 +30,7 @@ function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="employees" element={<Employees />} />
+          <Route path="employees/:id/history" element={<History />} />
           <Route path="recordings" element={<Recordings />} />
           <Route path="sessions" element={<Sessions />} />
           <Route path="download-tracker" element={<DownloadTracker />} />

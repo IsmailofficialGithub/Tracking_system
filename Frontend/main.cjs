@@ -60,11 +60,7 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  // Configure Auto-Launch (start minimized or silently on boot)
-  app.setLoginItemSettings({
-    openAtLogin: true,
-    path: app.getPath('exe'),
-  });
+  // Removed auto-launch on boot as requested
 
   // Configure System Tray
   const { nativeImage } = require('electron');
@@ -79,13 +75,13 @@ app.whenReady().then(() => {
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Show Dashboard', click: () => mainWindow.show() },
     { type: 'separator' },
-    { label: 'Quit Exiomra Tracking System', click: () => {
+    { label: 'Quit Axiomra Attendance', click: () => {
       app.isQuitting = true;
       app.quit();
     }}
   ]);
 
-  tray.setToolTip('Exiomra Tracking System');
+  tray.setToolTip('Axiomra Attendance');
   tray.setContextMenu(contextMenu);
 
   // When double clicking tray, show the window
@@ -93,11 +89,11 @@ app.whenReady().then(() => {
     mainWindow.show();
   });
 
-  // Prevent app from closing when X is clicked, instead minimize to tray
+  // Prevent app from closing when X is clicked, instead minimize
   mainWindow.on('close', (event) => {
     if (!app.isQuitting) {
       event.preventDefault();
-      mainWindow.hide();
+      mainWindow.minimize();
     }
     return false;
   });
@@ -117,31 +113,19 @@ app.whenReady().then(() => {
 
   ipcMain.on('window-minimize', () => {
     if (mainWindow) {
-      logEvent('User minimized window, hiding to tray');
-      mainWindow.hide();
+      logEvent('User minimized window');
+      mainWindow.minimize();
     }
   });
 
   ipcMain.on('window-close', () => {
     if (mainWindow) {
-      logEvent('User clicked custom close button, minimizing to tray');
-      mainWindow.hide();
+      logEvent('User clicked custom close button, minimizing window');
+      mainWindow.minimize();
     }
   });
 
-  ipcMain.on('window-set-mini-mode', (event, isMini) => {
-    if (mainWindow) {
-      if (isMini) {
-        mainWindow.setMinimumSize(220, 60);
-        mainWindow.setSize(220, 60);
-        mainWindow.setAlwaysOnTop(true, 'floating');
-      } else {
-        mainWindow.setMinimumSize(400, 600);
-        mainWindow.setSize(450, 700);
-        mainWindow.setAlwaysOnTop(false);
-      }
-    }
-  });
+  // Mini mode logic has been removed as requested
 
   ipcMain.on('open-external-url', (event, url) => {
     require('electron').shell.openExternal(url);

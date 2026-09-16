@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { MoreVertical, History, Video, Lock, Trash2, CalendarCheck } from 'lucide-react';
 import api from '../api/axios';
 import './Employees.css';
 
@@ -28,7 +30,20 @@ const Employees: React.FC = () => {
   const [editingShift, setEditingShift] = useState<ShiftTemplate | null>(null);
   const [showAssignShift, setShowAssignShift] = useState<string | null>(null); // employee id
   const [selectedShiftId, setSelectedShiftId] = useState('');
+  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [showChangePasswordId, setShowChangePasswordId] = useState<string | null>(null);
+  const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  const navigate = useNavigate();
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => setActiveMenuId(null);
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'employee' });
   const [newShift, setNewShift] = useState({ name: '', start_time: '08:00', end_time: '17:00', grace_minutes: 15, timezone: 'UTC' });
@@ -70,6 +85,19 @@ const Employees: React.FC = () => {
       loadData();
     } catch {
       setError('Failed to delete employee');
+    }
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showChangePasswordId) return;
+    try {
+      await api.put(`/admin/users/${showChangePasswordId}/password`, { password: newPassword });
+      setSuccess('Password changed successfully');
+      setShowChangePasswordId(null);
+      setNewPassword('');
+    } catch {
+      setError('Failed to change password');
     }
   };
 
@@ -138,6 +166,7 @@ const Employees: React.FC = () => {
   return (
     <div className="page">
       {error && <div className="alert-error" onClick={() => setError('')}>{error} ✕</div>}
+      {success && <div className="alert-success" onClick={() => setSuccess('')}>{success} ✕</div>}
 
       {/* Employees Section */}
       <div className="section-header">
@@ -182,6 +211,24 @@ const Employees: React.FC = () => {
         </div>
       )}
 
+      {showChangePasswordId && (
+        <div className="modal-overlay" onClick={() => setShowChangePasswordId(null)}>
+          <div className="modal glass-panel" onClick={e => e.stopPropagation()}>
+            <h3>Change Password</h3>
+            <form onSubmit={handleChangePassword}>
+              <div className="input-group">
+                <label className="input-label">New Password</label>
+                <input className="input-field" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required placeholder="Enter new password" />
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn btn-outline" onClick={() => setShowChangePasswordId(null)}>Cancel</button>
+                <button type="submit" className="btn btn-primary">Change Password</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="loading">Loading...</div>
       ) : (
@@ -204,11 +251,33 @@ const Employees: React.FC = () => {
                   <td><span className={roleColor(u.role)}>{u.role}</span></td>
                   <td className="text-muted">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td>
-                    <div className="action-row">
+                    <div className="action-row" style={{ position: 'relative' }}>
                       <button className="btn btn-sm btn-outline" onClick={() => { setShowAssignShift(u.id); setSelectedShiftId(''); }}>
-                        Assign Shift
+                        <CalendarCheck size={14} /> Assign Shift
                       </button>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDeleteUser(u.id)}>Delete</button>
+                      
+                      {/* 3-Dot Menu */}
+                      <button className="btn btn-icon" onClick={(e) => { e.stopPropagation(); setActiveMenuId(activeMenuId === u.id ? null : u.id); }}>
+                        <MoreVertical size={16} />
+                      </button>
+
+                      {activeMenuId === u.id && (
+                        <div className="dropdown-menu glass-panel" style={{ position: 'absolute', top: '100%', right: '0', zIndex: 10, display: 'flex', flexDirection: 'column', minWidth: '160px', padding: '8px 0', gap: '4px' }}>
+                          <button className="dropdown-item" onClick={() => navigate(`/employees/${u.id}/history`)} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                            <History size={14} /> History
+                          </button>
+                          <button className="dropdown-item" onClick={() => { setActiveMenuId(null); navigate('/recordings'); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                            <Video size={14} /> Recordings
+                          </button>
+                          <button className="dropdown-item" onClick={() => { setShowChangePasswordId(u.id); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'transparent', border: 'none', color: 'var(--text-main)', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                            <Lock size={14} /> Change Password
+                          </button>
+                          <hr style={{ borderColor: 'rgba(255,255,255,0.1)', margin: '4px 0' }} />
+                          <button className="dropdown-item" onClick={() => { handleDeleteUser(u.id); setActiveMenuId(null); }} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', background: 'transparent', border: 'none', color: '#ef4444', textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+                            <Trash2 size={14} /> Delete
+                          </button>
+                        </div>
+                      )}
                     </div>
                     {showAssignShift === u.id && (
                       <div className="assign-shift-inline">

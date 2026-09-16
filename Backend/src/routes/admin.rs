@@ -3,7 +3,7 @@ use crate::models::{ShiftTemplate, User};
 use crate::state::AppState;
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, State, Query},
     http::StatusCode,
     routing::{delete, get, post, put},
 };
@@ -15,6 +15,11 @@ use axum::response::{IntoResponse, Response};
 use axum::body::Body;
 use axum::http::header;
 use std::io::Write;
+#[derive(Deserialize)]
+pub struct ChangePasswordRequest {
+    pub password: String,
+}
+
 #[derive(Deserialize)]
 pub struct CreateShiftTemplate {
     pub name: String,
@@ -67,6 +72,7 @@ pub fn admin_routes() -> Router<AppState> {
         // Users / Employees
         .route("/users", get(list_users).post(create_employee))
         .route("/users/{id}", delete(delete_user))
+        .route("/users/{id}/password", put(change_user_password))
         // Shift Templates
         .route(
             "/shift-templates",
@@ -204,6 +210,29 @@ async fn delete_user(
     Ok(StatusCode::NO_CONTENT)
 }
 
+async fn change_user_password(
+    State(state): State<AppState>,
+    _auth: AuthUser,
+    Path(id): Path<Uuid>,
+    Json(payload): Json<ChangePasswordRequest>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    let password_hash = bcrypt::hash(&payload.password, bcrypt::DEFAULT_COST)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let result = sqlx::query("UPDATE public.users SET password_hash = $1 WHERE id = $2")
+        .bind(&password_hash)
+        .bind(id)
+        .execute(&state.db)
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    if result.rows_affected() == 0 {
+        return Err((StatusCode::NOT_FOUND, "User not found".to_string()));
+    }
+    
+    Ok(StatusCode::OK)
+}
+
 // ---- Shift Templates ----
 
 async fn list_shift_templates(
@@ -332,35 +361,71 @@ async fn assign_shift(
 
 // ---- Sessions / Logs ----
 
+#[derive(Deserialize)]
+pub struct SessionFilter {
+    pub employee_id: Option<Uuid>,
+}
+
 async fn list_sessions(
     State(state): State<AppState>,
     _auth: AuthUser,
+    Query(filter): Query<SessionFilter>,
 ) -> Result<Json<Vec<SessionWithEmployee>>, StatusCode> {
-    let rows = sqlx::query_as::<
-        _,
-        (
-            Uuid,
-            Uuid,
-            String,
-            String,
-            Uuid,
-            chrono::DateTime<chrono::Utc>,
-            Option<chrono::DateTime<chrono::Utc>>,
-            String,
-        ),
-    >(
-        r#"
-        SELECT s.id, s.employee_id, u.name, u.email, s.shift_template_id,
-               s.check_in_at, s.check_out_at, s.status::text
-        FROM public.sessions s
-        JOIN public.users u ON s.employee_id = u.id
-        ORDER BY s.check_in_at DESC
-        LIMIT 200
-        "#,
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let rows = if let Some(emp_id) = filter.employee_id {
+        sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                Uuid,
+                String,
+                String,
+                Uuid,
+                chrono::DateTime<chrono::Utc>,
+                Option<chrono::DateTime<chrono::Utc>>,
+                String,
+            ),
+        >(
+            r#"
+            SELECT s.id, s.employee_id, u.name, u.email, s.shift_template_id,
+                   s.check_in_at, s.check_out_at, s.status::text
+            FROM public.sessions s
+            JOIN public.users u ON s.employee_id = u.id
+            WHERE s.employee_id = $1
+            ORDER BY s.check_in_at DESC
+            LIMIT 200
+            "#,
+        )
+        .bind(emp_id)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        sqlx::query_as::<
+            _,
+            (
+                Uuid,
+                Uuid,
+                String,
+                String,
+                Uuid,
+                chrono::DateTime<chrono::Utc>,
+                Option<chrono::DateTime<chrono::Utc>>,
+                String,
+            ),
+        >(
+            r#"
+            SELECT s.id, s.employee_id, u.name, u.email, s.shift_template_id,
+                   s.check_in_at, s.check_out_at, s.status::text
+            FROM public.sessions s
+            JOIN public.users u ON s.employee_id = u.id
+            ORDER BY s.check_in_at DESC
+            LIMIT 200
+            "#,
+        )
+        .fetch_all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    };
 
     let sessions = rows
         .into_iter()
@@ -443,38 +508,79 @@ pub struct RecordingWithEmployeeDaily {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+#[derive(Deserialize)]
+pub struct RecordingsFilter {
+    pub days: Option<u32>,
+}
+
 async fn list_recordings(
     State(state): State<AppState>,
     _auth: AuthUser,
+    Query(filter): Query<RecordingsFilter>,
 ) -> Result<Json<Vec<RecordingWithEmployeeDaily>>, StatusCode> {
-    let rows = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            String,
-            i64,
-            chrono::DateTime<chrono::Utc>,
-        ),
-    >(
-        r#"
-        SELECT 
-            (u.id::text || '_' || TO_CHAR(DATE(s.check_in_at), 'YYYY-MM-DD')) as id, 
-            u.name, 
-            u.email, 
-            COALESCE(SUM(r.size_bytes), 0)::bigint as size_bytes, 
-            MIN(s.check_in_at) as created_at
-        FROM public.sessions s
-        JOIN public.users u ON s.employee_id = u.id
-        JOIN public.recordings r ON r.session_id = s.id
-        GROUP BY u.id, u.name, u.email, DATE(s.check_in_at)
-        ORDER BY created_at DESC
-        LIMIT 200
-        "#,
-    )
-    .fetch_all(&state.db)
-    .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let days = filter.days.unwrap_or(0);
+
+    let rows = if days > 0 {
+        sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                i64,
+                chrono::DateTime<chrono::Utc>,
+            ),
+        >(
+            r#"
+            SELECT 
+                (u.id::text || '_' || TO_CHAR(DATE(s.check_in_at), 'YYYY-MM-DD')) as id, 
+                u.name, 
+                u.email, 
+                COALESCE(SUM(r.size_bytes), 0)::bigint as size_bytes, 
+                MIN(s.check_in_at) as created_at
+            FROM public.sessions s
+            JOIN public.users u ON s.employee_id = u.id
+            JOIN public.recordings r ON r.session_id = s.id
+            WHERE s.check_in_at > NOW() - ($1::int * interval '1 day')
+            GROUP BY u.id, u.name, u.email, DATE(s.check_in_at)
+            ORDER BY created_at DESC
+            LIMIT 200
+            "#,
+        )
+        .bind(days as i32)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    } else {
+        sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                i64,
+                chrono::DateTime<chrono::Utc>,
+            ),
+        >(
+            r#"
+            SELECT 
+                (u.id::text || '_' || TO_CHAR(DATE(s.check_in_at), 'YYYY-MM-DD')) as id, 
+                u.name, 
+                u.email, 
+                COALESCE(SUM(r.size_bytes), 0)::bigint as size_bytes, 
+                MIN(s.check_in_at) as created_at
+            FROM public.sessions s
+            JOIN public.users u ON s.employee_id = u.id
+            JOIN public.recordings r ON r.session_id = s.id
+            GROUP BY u.id, u.name, u.email, DATE(s.check_in_at)
+            ORDER BY created_at DESC
+            LIMIT 200
+            "#,
+        )
+        .fetch_all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    };
 
     let recordings = rows
         .into_iter()

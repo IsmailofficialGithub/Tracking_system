@@ -25,6 +25,7 @@ const Recordings: React.FC = () => {
   const [playing, setPlaying] = useState<Recording | null>(null);
   const [sessionLogs, setSessionLogs] = useState<SessionLog[]>([]);
   const [filter, setFilter] = useState('');
+  const [timeFilter, setTimeFilter] = useState<number>(0);
 
   useEffect(() => {
     if (playing) {
@@ -39,11 +40,12 @@ const Recordings: React.FC = () => {
   const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
   useEffect(() => {
-    api.get('/admin/recordings')
+    setLoading(true);
+    api.get(`/admin/recordings?days=${timeFilter}`)
       .then(r => setRecordings(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [timeFilter]);
 
   const formatSize = (bytes: number) => {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -67,12 +69,24 @@ const Recordings: React.FC = () => {
           <h1>Recordings</h1>
           <p className="text-muted">Browse and playback employee screen recordings</p>
         </div>
-        <input
-          className="input-field search-input"
-          placeholder="Filter by employee..."
-          value={filter}
-          onChange={e => setFilter(e.target.value)}
-        />
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <select 
+            className="input-field" 
+            value={timeFilter} 
+            onChange={e => setTimeFilter(Number(e.target.value))}
+            style={{ minWidth: '150px' }}
+          >
+            <option value={0}>All Time</option>
+            <option value={7}>Last 7 Days</option>
+            <option value={30}>Last 30 Days</option>
+          </select>
+          <input
+            className="input-field search-input"
+            placeholder="Filter by employee..."
+            value={filter}
+            onChange={e => setFilter(e.target.value)}
+          />
+        </div>
       </div>
 
       {playing && (

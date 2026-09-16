@@ -1,6 +1,6 @@
 use crate::auth::AuthUser;
 use crate::models::{Session, ShiftTemplate};
-use crate::services::shift_rules::evaluate_check_in_status;
+use crate::services::shift_rules::{evaluate_check_in_status, evaluate_check_out_status};
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -97,6 +97,10 @@ async fn check_in(
     let status = evaluate_check_in_status(now, &shift)
         .map_err(|e| (StatusCode::BAD_REQUEST, e.to_string()))?;
 
+    if status == crate::models::SessionStatus::Rejected {
+        return Err((StatusCode::BAD_REQUEST, "Check-in time is not within a valid shift window.".to_string()));
+    }
+
     let session = sqlx::query_as::<_, Session>(
         r#"
         INSERT INTO public.sessions (employee_id, shift_template_id, check_in_at, status)
@@ -136,34 +140,58 @@ async fn check_out(
     let employee_id = Uuid::parse_str(&auth.0.sub).map_err(|_| StatusCode::BAD_REQUEST)?;
     let now = Utc::now();
 
-    let result = sqlx::query_scalar::<_, Uuid>(
+    let session = sqlx::query_as::<_, Session>(
         r#"
-        UPDATE public.sessions
-        SET check_out_at = $1, status = 'completed'
-        WHERE employee_id = $2 AND check_out_at IS NULL
-        RETURNING id
-        "#,
+        SELECT *
+        FROM public.sessions 
+        WHERE employee_id = $1 AND check_out_at IS NULL
+        LIMIT 1
+        "#
     )
-    .bind(now)
     .bind(employee_id)
     .fetch_optional(&state.db)
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if let Some(session_id) = result {
-        // Log check_out event
-        sqlx::query(
-            "INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'check_out')"
-        )
-        .bind(session_id)
-        .execute(&state.db)
-        .await
-        .ok();
-        
-        Ok(StatusCode::OK)
-    } else {
-        Err(StatusCode::NOT_FOUND)
-    }
+    let session = match session {
+        Some(s) => s,
+        None => return Err(StatusCode::NOT_FOUND),
+    };
+
+    let shift = sqlx::query_as::<_, ShiftTemplate>(
+        "SELECT * FROM public.shift_templates WHERE id = $1"
+    )
+    .bind(session.shift_template_id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let status = evaluate_check_out_status(now, &shift, session.check_in_at);
+
+    sqlx::query(
+        r#"
+        UPDATE public.sessions
+        SET check_out_at = $1, status = $2::session_status
+        WHERE id = $3
+        "#
+    )
+    .bind(now)
+    .bind(status)
+    .bind(session.id)
+    .execute(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Log check_out event
+    sqlx::query(
+        "INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'check_out')"
+    )
+    .bind(session.id)
+    .execute(&state.db)
+    .await
+    .ok();
+    
+    Ok(StatusCode::OK)
 }
 
 async fn pause(

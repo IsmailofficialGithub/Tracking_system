@@ -9,7 +9,6 @@ const FALLBACK_BACKEND_URL = (window as any).ENV?.VITE_BACKEND_URL || import.met
 function App() {
   const [backendUrl, setBackendUrl] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
-  const [isMiniMode, setIsMiniMode] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -32,11 +31,6 @@ function App() {
     fetchConfig();
   }, []);
 
-  const toggleMiniMode = (mini: boolean) => {
-    setIsMiniMode(mini);
-    (window as any).electronAPI?.setMiniMode(mini);
-  };
-
   const handleMinimize = () => {
     (window as any).electronAPI?.minimize();
   };
@@ -56,26 +50,9 @@ function App() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
       <UpdateChecker />
       
-      {/* Mini Mode Widget */}
-      <div style={{ display: isMiniMode ? 'block' : 'none', height: '100vh', width: '100vw', background: 'transparent', padding: '10px', WebkitAppRegion: 'drag' } as any}>
-        <div className="mini-widget">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div className="live-dot" style={{ background: isPaused ? '#f59e0b' : 'var(--accent)' }} />
-            <span className="timer-text">
-              {String(Math.floor(recordingDuration / 60)).padStart(2, '0')}:
-              {String(recordingDuration % 60).padStart(2, '0')}
-            </span>
-          </div>
-          <button onClick={() => toggleMiniMode(false)} className="mini-widget-btn" title="Expand" style={{ WebkitAppRegion: 'no-drag' } as any}>
-            <Maximize2 size={14} />
-          </button>
-        </div>
-      </div>
-
-      {/* Main Mode View */}
-      <div style={{ display: isMiniMode ? 'none' : 'flex', flexDirection: 'column', flex: 1 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
         <div className="titlebar">
-          <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>Exiomra Tracking System</div>
+          <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>Axiomra Attendance</div>
           <div style={{ display: 'flex', gap: '4px', WebkitAppRegion: 'no-drag' } as any}>
             <button onClick={handleMinimize} className="titlebar-btn">
               <Minus size={16} />
@@ -97,7 +74,6 @@ function App() {
                 setIsPaused={setIsPaused}
                 recordingDuration={recordingDuration}
                 setRecordingDuration={setRecordingDuration}
-                toggleMiniMode={toggleMiniMode}
               />
             : <Login setSessionToken={setSessionToken} backendUrl={backendUrl} />
           }
@@ -117,10 +93,9 @@ interface DashboardProps {
   setIsPaused: (v: boolean) => void;
   recordingDuration: number;
   setRecordingDuration: (v: any) => void;
-  toggleMiniMode: (v: boolean) => void;
 }
 
-function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecording, setIsRecording, isPaused, setIsPaused, setRecordingDuration, toggleMiniMode }: DashboardProps) {
+function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecording, setIsRecording, isPaused, setIsPaused, setRecordingDuration }: DashboardProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -297,11 +272,6 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       setIsRecording(true);
       setIsPaused(false);
       setRecordingDuration(0);
-      
-      // Auto-minimize after 2.5 seconds
-      setTimeout(() => {
-        toggleMiniMode(true);
-      }, 2500);
     } catch (e: any) {
       console.error("Shift Start Error:", e);
       let errMsg = "Failed to start shift.";
@@ -339,7 +309,7 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       }
     } catch (err) {
       console.error("Failed to toggle pause state", err);
-      setError("Failed to pause/resume tracking.");
+      setError("Failed to pause/resume attendance.");
     } finally {
       setIsProcessing(false);
     }
@@ -396,12 +366,12 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
   return (
     <div className="glass-panel" style={{ width: '320px', textAlign: 'center' }}>
       <h2 style={{ marginBottom: '1rem' }}>
-        {isRecording ? (isPaused ? '⏸️ Shift Paused' : '🟢 Tracking Active') : 'Dashboard'}
+        {isRecording ? (isPaused ? '⏸️ Shift Paused' : '🟢 Attendance Active') : 'Dashboard'}
       </h2>
       <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
         {isRecording
           ? isPaused
-            ? 'Tracking is paused. Click Resume to continue.'
+            ? 'Attendance is paused. Click Resume to continue.'
             : 'Shift is active.'
           : 'Ready to start your shift.'}
       </p>
@@ -493,7 +463,7 @@ function Login({ setSessionToken, backendUrl: BACKEND_URL }: { setSessionToken: 
     <div className="glass-panel" style={{ width: '320px' }}>
       <h2 style={{ marginBottom: '0.5rem', textAlign: 'center', fontSize: '1.5rem', fontWeight: 'bold' }}>Sign In</h2>
       <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', textAlign: 'center', fontSize: '0.9rem' }}>
-        Access your tracking dashboard
+        Access your attendance dashboard
       </p>
 
       {error && (

@@ -53,6 +53,12 @@ pub enum SessionStatus {
     Interrupted,
     EndedEarly,
     Completed,
+    Rejected,
+    Flagged,
+    HalfDay,
+    Overtime,
+    Absent,
+    AutoCompleted,
 }
 
 #[allow(dead_code)]
