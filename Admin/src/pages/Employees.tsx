@@ -10,6 +10,11 @@ interface User {
   email: string;
   role: string;
   created_at: string;
+  shift_id?: string | null;
+  shift_name?: string | null;
+  shift_start_time?: string | null;
+  shift_end_time?: string | null;
+  shift_timezone?: string | null;
 }
 
 interface ShiftTemplate {
@@ -45,8 +50,9 @@ const Employees: React.FC = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
+  const defaultTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   const [newUser, setNewUser] = useState({ name: '', email: '', password: '', role: 'employee' });
-  const [newShift, setNewShift] = useState({ name: '', start_time: '08:00', end_time: '17:00', grace_minutes: 15, timezone: 'UTC' });
+  const [newShift, setNewShift] = useState({ name: '', start_time: '08:00', end_time: '17:00', grace_minutes: 15, timezone: defaultTimezone });
 
   const loadData = async () => {
     setLoading(true);
@@ -142,6 +148,8 @@ const Employees: React.FC = () => {
       await api.post('/admin/employee-shifts', { employee_id: employeeId, shift_template_id: selectedShiftId });
       setShowAssignShift(null);
       setSelectedShiftId('');
+      setSuccess('Shift assigned successfully!');
+      loadData();
     } catch {
       setError('Failed to assign shift');
     }
@@ -239,6 +247,7 @@ const Employees: React.FC = () => {
                 <th>Name</th>
                 <th>Email</th>
                 <th>Role</th>
+                <th>Assigned Shift</th>
                 <th>Joined</th>
                 <th>Actions</th>
               </tr>
@@ -249,6 +258,15 @@ const Employees: React.FC = () => {
                   <td className="td-name">{u.name}</td>
                   <td className="text-muted">{u.email}</td>
                   <td><span className={roleColor(u.role)}>{u.role}</span></td>
+                  <td>
+                    {u.shift_name ? (
+                      <span className="badge badge-info" title={`Timezone: ${u.shift_timezone || 'UTC'}`}>
+                        {u.shift_name} ({u.shift_start_time?.slice(0, 5)} - {u.shift_end_time?.slice(0, 5)})
+                      </span>
+                    ) : (
+                      <span className="text-muted text-sm">No Shift</span>
+                    )}
+                  </td>
                   <td className="text-muted">{new Date(u.created_at).toLocaleDateString()}</td>
                   <td>
                     <div className="action-row" style={{ position: 'relative' }}>
@@ -309,7 +327,7 @@ const Employees: React.FC = () => {
                 </tr>
               ))}
               {users.length === 0 && (
-                <tr><td colSpan={5} className="empty-row">No employees yet. Add your first employee!</td></tr>
+                <tr><td colSpan={6} className="empty-row">No employees yet. Add your first employee!</td></tr>
               )}
             </tbody>
           </table>

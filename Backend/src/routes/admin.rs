@@ -355,7 +355,7 @@ async fn assign_shift(
 ) -> Result<StatusCode, (StatusCode, String)> {
     let effective_from = payload
         .effective_from
-        .unwrap_or_else(|| chrono::Local::now().date_naive());
+        .unwrap_or_else(|| chrono::Utc::now().date_naive());
 
     // Close any existing active assignment for this employee
     sqlx::query(

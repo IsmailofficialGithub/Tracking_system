@@ -54,7 +54,7 @@ async fn check_in(
         WHERE es.employee_id = $1
           AND es.effective_from <= CURRENT_DATE
           AND (es.effective_to IS NULL OR es.effective_to >= CURRENT_DATE)
-        ORDER BY es.effective_from DESC
+        ORDER BY es.effective_from DESC, es.created_at DESC
         LIMIT 1
         "#,
     )
@@ -277,7 +277,7 @@ async fn my_shift(
         WHERE es.employee_id = $1
           AND es.effective_from <= CURRENT_DATE
           AND (es.effective_to IS NULL OR es.effective_to >= CURRENT_DATE)
-        ORDER BY es.effective_from DESC
+        ORDER BY es.effective_from DESC, es.created_at DESC
         LIMIT 1
         "#,
     )
