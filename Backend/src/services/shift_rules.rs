@@ -33,11 +33,33 @@ pub fn get_logical_shift_times(now_local: DateTime<Tz>, shift: &ShiftTemplate) -
     }
 }
 
+pub fn parse_tz(tz_str: &str) -> Tz {
+    let clean = tz_str.trim();
+    if let Ok(tz) = Tz::from_str(clean) {
+        return tz;
+    }
+    match clean.to_uppercase().as_str() {
+        "PKT" => Tz::Asia__Karachi,
+        "EST" | "EDT" => Tz::America__New_York,
+        "PST" | "PDT" => Tz::America__Los_Angeles,
+        "CST" | "CDT" => Tz::America__Chicago,
+        "MST" | "MDT" => Tz::America__Denver,
+        "IST" => Tz::Asia__Kolkata,
+        "GMT" | "UTC" | "Z" => Tz::UTC,
+        "BST" | "CET" => Tz::Europe__London,
+        "AEST" | "AEDT" => Tz::Australia__Sydney,
+        "SGT" => Tz::Asia__Singapore,
+        "JST" => Tz::Asia__Tokyo,
+        "GST" => Tz::Asia__Dubai,
+        _ => Tz::UTC,
+    }
+}
+
 pub fn evaluate_check_in_status(
     now_utc: DateTime<Utc>,
     shift: &ShiftTemplate,
 ) -> Result<SessionStatus, &'static str> {
-    let tz = Tz::from_str(&shift.timezone).unwrap_or(Tz::UTC);
+    let tz = parse_tz(&shift.timezone);
     let now_local = now_utc.with_timezone(&tz);
     
     let (start_dt, end_dt) = get_logical_shift_times(now_local, shift);
@@ -64,7 +86,7 @@ pub fn evaluate_check_out_status(
     shift: &ShiftTemplate,
     check_in_utc: DateTime<Utc>,
 ) -> SessionStatus {
-    let tz = Tz::from_str(&shift.timezone).unwrap_or(Tz::UTC);
+    let tz = parse_tz(&shift.timezone);
     let check_in_local = check_in_utc.with_timezone(&tz);
     let now_local = now_utc.with_timezone(&tz);
     
@@ -122,5 +144,26 @@ mod tests {
         ).unwrap();
         let status = evaluate_check_in_status(local_dt.with_timezone(&Utc), &shift);
         assert_eq!(status, Ok(SessionStatus::Rejected));
+    }
+
+    #[test]
+    fn test_pkt_night_shift() {
+        let shift = ShiftTemplate {
+            id: uuid::Uuid::new_v4(),
+            name: "Night Shift".to_string(),
+            start_time: NaiveTime::from_hms_opt(20, 0, 0).unwrap(),
+            end_time: NaiveTime::from_hms_opt(3, 0, 0).unwrap(),
+            grace_minutes: 15,
+            timezone: "PKT".to_string(),
+            created_at: Utc::now(),
+        };
+        let tz: Tz = "Asia/Karachi".parse().unwrap();
+        // 9:00 PM (21:00) in PKT on Sept 17
+        let local_dt = tz.from_local_datetime(
+            &NaiveDate::from_ymd_opt(2026, 9, 17).unwrap().and_hms_opt(21, 0, 0).unwrap(),
+        ).unwrap();
+
+        let status = evaluate_check_in_status(local_dt.with_timezone(&Utc), &shift);
+        assert_eq!(status, Ok(SessionStatus::Late));
     }
 }
