@@ -105,6 +105,8 @@ pub enum SessionEvent {
     Pause,
     Resume,
     CheckOut,
+    Offline,
+    AutoCheckout,
 }
 
 #[allow(dead_code)]
