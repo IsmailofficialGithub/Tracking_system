@@ -89,15 +89,6 @@ app.whenReady().then(() => {
     mainWindow.show();
   });
 
-  // Prevent app from closing when X is clicked, instead minimize
-  mainWindow.on('close', (event) => {
-    if (!app.isQuitting) {
-      event.preventDefault();
-      mainWindow.minimize();
-    }
-    return false;
-  });
-
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -120,8 +111,9 @@ app.whenReady().then(() => {
 
   ipcMain.on('window-close', () => {
     if (mainWindow) {
-      logEvent('User clicked custom close button, minimizing window');
-      mainWindow.minimize();
+      logEvent('User clicked custom close button, closing window');
+      app.isQuitting = true;
+      mainWindow.close();
     }
   });
 
