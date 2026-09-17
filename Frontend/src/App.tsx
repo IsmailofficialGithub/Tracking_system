@@ -52,7 +52,10 @@ function App() {
       
       <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
         <div className="titlebar">
-          <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>Axiomra Attendance</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <img src="/favicon.png" alt="Icon" style={{ width: '16px', height: '16px' }} />
+            <div style={{ fontWeight: '600', fontSize: '13px', color: 'var(--text-main)', letterSpacing: '0.5px' }}>Axiomra Attendance</div>
+          </div>
           <div style={{ display: 'flex', gap: '4px', WebkitAppRegion: 'no-drag' } as any}>
             <button onClick={handleMinimize} className="titlebar-btn">
               <Minus size={16} />
@@ -488,6 +491,9 @@ function Login({ setSessionToken, backendUrl: BACKEND_URL }: { setSessionToken: 
 
   return (
     <div className="glass-panel" style={{ width: '320px' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1rem', height: '60px', overflow: 'hidden', alignItems: 'center' }}>
+        <img src="/logo.png" alt="Axiomra" style={{ width: '200px', height: 'auto', filter: 'invert(1) hue-rotate(180deg)' }} />
+      </div>
       <h2 style={{ marginBottom: '0.5rem', textAlign: 'center', fontSize: '1.5rem', fontWeight: 'bold' }}>Sign In</h2>
       <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem', textAlign: 'center', fontSize: '0.9rem' }}>
         Access your attendance dashboard
