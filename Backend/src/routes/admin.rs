@@ -88,7 +88,7 @@ pub fn admin_routes() -> Router<AppState> {
         .route("/sessions", get(list_sessions))
         .route("/sessions/{id}/logs", get(list_session_logs))
         // Recordings
-        .route("/recordings", get(list_recordings))
+        .route("/recordings", get(list_recordings).delete(delete_recordings))
         .route("/recordings/download/{session_id}", get(download_recording_zip))
         // Live View
         .route("/live/{session_id}", get(get_live_screenshot))
@@ -514,6 +514,11 @@ pub struct RecordingsFilter {
     pub employee_id: Option<Uuid>,
 }
 
+#[derive(Deserialize)]
+pub struct DeleteRecordingsRequest {
+    pub ids: Vec<String>,
+}
+
 async fn list_recordings(
     State(state): State<AppState>,
     _auth: AuthUser,
@@ -607,3 +612,50 @@ async fn list_recordings(
 
     Ok(Json(recordings))
 }
+
+async fn delete_recordings(
+    State(state): State<AppState>,
+    _auth: AuthUser,
+    Json(payload): Json<DeleteRecordingsRequest>,
+) -> Result<StatusCode, StatusCode> {
+    for composite_id in payload.ids {
+        let parts: Vec<&str> = composite_id.split('_').collect();
+        if parts.len() != 2 {
+            continue;
+        }
+
+        let employee_id = match uuid::Uuid::parse_str(parts[0]) {
+            Ok(id) => id,
+            Err(_) => continue,
+        };
+        let date_str = parts[1];
+
+        // Find session IDs
+        let session_ids = sqlx::query_scalar::<_, uuid::Uuid>(
+            r#"
+            SELECT s.id FROM public.sessions s
+            JOIN public.recordings r ON r.session_id = s.id
+            WHERE s.employee_id = $1 AND DATE(s.check_in_at) = $2::date
+            "#
+        )
+        .bind(employee_id)
+        .bind(date_str)
+        .fetch_all(&state.db)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+        for session_id in session_ids {
+            let dir_path = format!("uploads/recordings/{}/{}", employee_id, session_id);
+            let _ = std::fs::remove_dir_all(&dir_path);
+
+            let _ = sqlx::query("DELETE FROM public.recordings WHERE session_id = $1")
+                .bind(session_id)
+                .execute(&state.db)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        }
+    }
+
+    Ok(StatusCode::OK)
+}
+

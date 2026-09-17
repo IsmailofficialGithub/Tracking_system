@@ -23,6 +23,24 @@ interface SessionLog {
 
 const LiveVideoPlayer: React.FC<{ sessionId: string }> = ({ sessionId }) => {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      containerRef.current?.requestFullscreen().catch(console.error);
+    } else {
+      document.exitFullscreen();
+    }
+  };
 
   useEffect(() => {
     let isActive = true;
@@ -53,7 +71,7 @@ const LiveVideoPlayer: React.FC<{ sessionId: string }> = ({ sessionId }) => {
   }, [sessionId]);
 
   return (
-    <div style={{ background: '#000', borderRadius: '12px', overflow: 'hidden', minHeight: '360px', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+    <div ref={containerRef} style={{ background: '#000', borderRadius: isFullscreen ? '0' : '12px', overflow: 'hidden', minHeight: '360px', height: isFullscreen ? '100vh' : 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
       {!imageSrc ? (
         <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 10, backdropFilter: 'blur(4px)' }}>
           <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
@@ -61,11 +79,19 @@ const LiveVideoPlayer: React.FC<{ sessionId: string }> = ({ sessionId }) => {
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       ) : (
-        <img
-          src={imageSrc}
-          alt="Live Screen Feed"
-          style={{ width: '100%', maxHeight: '420px', objectFit: 'contain' }}
-        />
+        <>
+          <img
+            src={imageSrc}
+            alt="Live Screen Feed"
+            style={{ width: '100%', height: '100%', maxHeight: isFullscreen ? '100vh' : '420px', objectFit: 'contain' }}
+          />
+          <button 
+            onClick={toggleFullscreen}
+            style={{ position: 'absolute', bottom: '15px', right: '15px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', zIndex: 20, fontSize: '0.85rem' }}
+          >
+            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen ⛶'}
+          </button>
+        </>
       )}
     </div>
   );

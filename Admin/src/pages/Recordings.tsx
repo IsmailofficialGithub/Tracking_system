@@ -32,6 +32,23 @@ const Recordings: React.FC = () => {
   const [sessionLogs, setSessionLogs] = useState<SessionLog[]>([]);
   const [filter, setFilter] = useState('');
   const [timeFilter, setTimeFilter] = useState<number>(0);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const handleDelete = async (ids: string[]) => {
+    if (!window.confirm(`Are you sure you want to delete ${ids.length} recording(s)?\n\nThis will permanently remove the video files from the server, but keep the time tracking session log intact.`)) return;
+    try {
+      const token = localStorage.getItem('admin_token');
+      await api.delete('/admin/recordings', {
+        headers: { 'Authorization': `Bearer ${token}` },
+        data: { ids }
+      });
+      setRecordings(prev => prev.filter(r => !ids.includes(r.id)));
+      setSelectedIds(prev => prev.filter(id => !ids.includes(id)));
+    } catch (e) {
+      console.error(e);
+      alert('Failed to delete recordings.');
+    }
+  };
 
   useEffect(() => {
     if (playing) {
@@ -79,6 +96,15 @@ const Recordings: React.FC = () => {
           <p className="text-muted">Browse and playback employee screen recordings</p>
         </div>
         <div style={{ display: 'flex', gap: '10px' }}>
+          {selectedIds.length > 0 && (
+            <button 
+              className="btn btn-outline" 
+              style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }} 
+              onClick={() => handleDelete(selectedIds)}
+            >
+              🗑 Delete ({selectedIds.length})
+            </button>
+          )}
           {employeeId && (
             <button 
               className="btn btn-outline" 
@@ -164,7 +190,25 @@ const Recordings: React.FC = () => {
       ) : (
         <div className="recordings-grid">
           {filtered.map(r => (
-            <div key={r.id} className="recording-card glass-panel" onClick={() => setPlaying(r)}>
+            <div key={r.id} className="recording-card glass-panel" onClick={() => setPlaying(r)} style={{ position: 'relative' }}>
+              <input
+                type="checkbox"
+                style={{ position: 'absolute', top: '12px', left: '12px', zIndex: 10, width: '18px', height: '18px', cursor: 'pointer' }}
+                checked={selectedIds.includes(r.id)}
+                onChange={(e) => {
+                  if (e.target.checked) setSelectedIds(prev => [...prev, r.id]);
+                  else setSelectedIds(prev => prev.filter(id => id !== r.id));
+                }}
+                onClick={e => e.stopPropagation()}
+              />
+              <button
+                className="btn btn-outline"
+                style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10, padding: '4px 8px', border: 'none', background: 'rgba(255,0,0,0.1)', color: '#ff4d4d', borderRadius: '4px' }}
+                onClick={(e) => { e.stopPropagation(); handleDelete([r.id]); }}
+                title="Delete Recording"
+              >
+                🗑
+              </button>
               <div className="recording-thumb">
                 <div className="play-icon">▶</div>
               </div>
