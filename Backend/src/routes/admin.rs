@@ -1,5 +1,5 @@
 use crate::auth::AuthUser;
-use crate::models::{ShiftTemplate, User};
+use crate::models::{ShiftTemplate, User, UserWithShift};
 use crate::state::AppState;
 use axum::{
     Json, Router,
@@ -157,11 +157,36 @@ async fn download_recording_zip(
 async fn list_users(
     State(state): State<AppState>,
     _auth: AuthUser,
-) -> Result<Json<Vec<User>>, StatusCode> {
-    let users = sqlx::query_as::<_, User>("SELECT * FROM public.users ORDER BY created_at DESC")
-        .fetch_all(&state.db)
-        .await
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+) -> Result<Json<Vec<UserWithShift>>, StatusCode> {
+    let users = sqlx::query_as::<_, UserWithShift>(
+        r#"
+        SELECT 
+            u.id, u.email, u.name, u.role, u.created_at,
+            st.id as shift_id,
+            st.name as shift_name,
+            st.start_time as shift_start_time,
+            st.end_time as shift_end_time,
+            st.timezone as shift_timezone
+        FROM public.users u
+        LEFT JOIN LATERAL (
+            SELECT st.id, st.name, st.start_time, st.end_time, st.timezone
+            FROM public.employee_shifts es
+            JOIN public.shift_templates st ON st.id = es.shift_template_id
+            WHERE es.employee_id = u.id
+              AND es.effective_from <= CURRENT_DATE
+              AND (es.effective_to IS NULL OR es.effective_to >= CURRENT_DATE)
+            ORDER BY es.effective_from DESC, es.created_at DESC
+            LIMIT 1
+        ) st ON true
+        ORDER BY u.created_at DESC
+        "#,
+    )
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| {
+        eprintln!("Error fetching users with shifts: {:?}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     Ok(Json(users))
 }
 

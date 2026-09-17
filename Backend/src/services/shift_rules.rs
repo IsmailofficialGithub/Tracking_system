@@ -18,16 +18,16 @@ pub fn get_logical_shift_times(now_local: DateTime<Tz>, shift: &ShiftTemplate) -
         tz.from_local_datetime(&current_date.and_time(shift.end_time)).unwrap()
     };
     
-    // Candidate 2: Yesterday's logical shift
-    let start_yesterday = tz.from_local_datetime(&current_date.pred_opt().unwrap().and_time(shift.start_time)).unwrap();
-    let end_yesterday = if crosses_midnight {
-        tz.from_local_datetime(&current_date.and_time(shift.end_time)).unwrap()
-    } else {
-        tz.from_local_datetime(&current_date.pred_opt().unwrap().and_time(shift.end_time)).unwrap()
-    };
-    
-    if now_local < start_today - Duration::minutes(60) {
-        (start_yesterday, end_yesterday)
+    if crosses_midnight {
+        // Candidate 2: Yesterday's logical shift (started yesterday, ends today)
+        let start_yesterday = tz.from_local_datetime(&current_date.pred_opt().unwrap().and_time(shift.start_time)).unwrap();
+        let end_yesterday = tz.from_local_datetime(&current_date.and_time(shift.end_time)).unwrap();
+        
+        if now_local < start_today - Duration::minutes(60) {
+            (start_yesterday, end_yesterday)
+        } else {
+            (start_today, end_today)
+        }
     } else {
         (start_today, end_today)
     }

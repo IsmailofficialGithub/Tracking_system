@@ -24,6 +24,20 @@ pub struct User {
 }
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
+pub struct UserWithShift {
+    pub id: Uuid,
+    pub email: String,
+    pub name: String,
+    pub role: UserRole,
+    pub created_at: DateTime<Utc>,
+    pub shift_id: Option<Uuid>,
+    pub shift_name: Option<String>,
+    pub shift_start_time: Option<NaiveTime>,
+    pub shift_end_time: Option<NaiveTime>,
+    pub shift_timezone: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct ShiftTemplate {
     pub id: Uuid,
     pub name: String,
