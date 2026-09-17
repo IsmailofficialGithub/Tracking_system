@@ -35,6 +35,10 @@ function App() {
     (window as any).electronAPI?.minimize();
   };
   const handleClose = () => {
+    if (sessionToken && isRecording) {
+      alert("Please checkout first before minimizing or closing the app.");
+      return;
+    }
     (window as any).electronAPI?.close();
   };
 
