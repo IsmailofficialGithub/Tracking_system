@@ -173,9 +173,8 @@ async fn list_users(
             FROM public.employee_shifts es
             JOIN public.shift_templates st ON st.id = es.shift_template_id
             WHERE es.employee_id = u.id
-              AND es.effective_from <= CURRENT_DATE
               AND (es.effective_to IS NULL OR es.effective_to >= CURRENT_DATE)
-            ORDER BY es.effective_from DESC, es.created_at DESC
+            ORDER BY es.created_at DESC
             LIMIT 1
         ) st ON true
         ORDER BY u.created_at DESC

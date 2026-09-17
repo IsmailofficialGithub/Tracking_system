@@ -52,9 +52,8 @@ async fn check_in(
         SELECT st.* FROM public.shift_templates st
         JOIN public.employee_shifts es ON es.shift_template_id = st.id
         WHERE es.employee_id = $1
-          AND es.effective_from <= CURRENT_DATE
           AND (es.effective_to IS NULL OR es.effective_to >= CURRENT_DATE)
-        ORDER BY es.effective_from DESC, es.created_at DESC
+        ORDER BY es.created_at DESC
         LIMIT 1
         "#,
     )
@@ -275,9 +274,8 @@ async fn my_shift(
         SELECT st.* FROM public.shift_templates st
         JOIN public.employee_shifts es ON es.shift_template_id = st.id
         WHERE es.employee_id = $1
-          AND es.effective_from <= CURRENT_DATE
           AND (es.effective_to IS NULL OR es.effective_to >= CURRENT_DATE)
-        ORDER BY es.effective_from DESC, es.created_at DESC
+        ORDER BY es.created_at DESC
         LIMIT 1
         "#,
     )
