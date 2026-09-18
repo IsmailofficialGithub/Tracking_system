@@ -1,7 +1,11 @@
 import { execSync } from 'child_process';
 import { readFileSync, writeFileSync } from 'fs';
-import { resolve, join } from 'path';
+import { resolve, join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import readline from 'readline';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -10,9 +14,9 @@ const rl = readline.createInterface({
 
 const prompt = (query) => new Promise(resolve => rl.question(query, resolve));
 
-// Paths
-const ROOT_DIR = resolve(process.cwd(), '..');
-const FRONTEND_DIR = resolve(process.cwd());
+// Paths - absolute resolution from script location
+const ROOT_DIR = resolve(__dirname, '..');
+const FRONTEND_DIR = join(ROOT_DIR, 'Frontend');
 const VERSION_FILE = join(ROOT_DIR, 'version.json');
 const PACKAGE_FILE = join(FRONTEND_DIR, 'package.json');
 const ENV_FILE = join(ROOT_DIR, '.env');
