@@ -48,16 +48,30 @@ const Sessions: React.FC = () => {
       completed: 'badge badge-success',
       interrupted: 'badge badge-danger',
       ended_early: 'badge badge-danger',
+      auto_completed: 'badge badge-warning',
     };
     return map[status] || 'badge';
   };
 
-  const duration = (checkIn: string, checkOut: string | null) => {
-    if (!checkOut) return 'Active';
+  const duration = (checkIn: string, checkOut: string | null, status: string) => {
+    if (!checkOut) {
+      if (status === 'interrupted') return 'Disconnected';
+      return 'Active';
+    }
     const ms = new Date(checkOut).getTime() - new Date(checkIn).getTime();
     const h = Math.floor(ms / 3600000);
     const m = Math.floor((ms % 3600000) / 60000);
     return `${h}h ${m}m`;
+  };
+
+  const renderCheckOutCell = (checkOut: string | null, status: string) => {
+    if (checkOut) {
+      return new Date(checkOut).toLocaleString();
+    }
+    if (status === 'interrupted') {
+      return <span style={{ color: '#ef4444', fontWeight: 500 }}>⚠️ Disconnected</span>;
+    }
+    return <span className="live-dot">● Live</span>;
   };
 
   return (
@@ -107,8 +121,8 @@ const Sessions: React.FC = () => {
                     <div className="text-muted text-sm">{s.employee_email}</div>
                   </td>
                   <td className="text-muted">{new Date(s.check_in_at).toLocaleString()}</td>
-                  <td className="text-muted">{s.check_out_at ? new Date(s.check_out_at).toLocaleString() : <span className="live-dot">● Live</span>}</td>
-                  <td className="text-muted">{duration(s.check_in_at, s.check_out_at)}</td>
+                  <td className="text-muted">{renderCheckOutCell(s.check_out_at, s.status)}</td>
+                  <td className="text-muted">{duration(s.check_in_at, s.check_out_at, s.status)}</td>
                   <td><span className={statusBadge(s.status)}>{s.status.replace('_', ' ')}</span></td>
                 </tr>
               ))}

@@ -43,12 +43,22 @@ async fn main() {
         )
         .nest("/api/realtime", routes::realtime::realtime_routes())
         .nest("/api/config", routes::config::config_routes())
-        .with_state(state)
+        .with_state(state.clone())
         .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(tower_http::cors::CorsLayer::permissive());
 
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());
     let addr = format!("0.0.0.0:{}", port);
+
+    // Spawn 30-minute auto-checkout background task for unclosed shifts
+    let auto_checkout_state = state.clone();
+    tokio::spawn(async move {
+        loop {
+            println!("Running background auto-checkout check for unclosed shifts...");
+            services::auto_checkout::process_stale_sessions(auto_checkout_state.clone()).await;
+            tokio::time::sleep(Duration::from_secs(30 * 60)).await;
+        }
+    });
 
     // Spawn 30-day auto-purge background task
     tokio::spawn(async move {
