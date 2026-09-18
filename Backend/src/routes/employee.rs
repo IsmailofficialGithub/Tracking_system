@@ -86,7 +86,7 @@ async fn check_in(
     if let Some(session_id) = existing_session {
         // Log resume event
         sqlx::query(
-            "INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'resume')"
+            "INSERT INTO public.session_logs (session_id, event_type, notes) VALUES ($1, 'resume', 'Employee resumed active session')"
         )
         .bind(session_id)
         .execute(&state.db)
@@ -133,7 +133,7 @@ async fn check_in(
 
     // Log check_in event
     sqlx::query(
-        "INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'check_in')"
+        "INSERT INTO public.session_logs (session_id, event_type, notes) VALUES ($1, 'check_in', 'Employee checked in and started shift')"
     )
     .bind(session.id)
     .execute(&state.db)
@@ -199,7 +199,7 @@ async fn check_out(
 
     // Log check_out event
     sqlx::query(
-        "INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'check_out')"
+        "INSERT INTO public.session_logs (session_id, event_type, notes) VALUES ($1, 'check_out', 'Employee checked out and ended shift normally')"
     )
     .bind(session.id)
     .execute(&state.db)
@@ -224,7 +224,7 @@ async fn pause(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if let Some(sid) = session_id {
-        sqlx::query("INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'pause')")
+        sqlx::query("INSERT INTO public.session_logs (session_id, event_type, notes) VALUES ($1, 'pause', 'Employee paused attendance')")
             .bind(sid)
             .execute(&state.db)
             .await
@@ -250,7 +250,7 @@ async fn resume(
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     if let Some(sid) = session_id {
-        sqlx::query("INSERT INTO public.session_logs (session_id, event_type) VALUES ($1, 'resume')")
+        sqlx::query("INSERT INTO public.session_logs (session_id, event_type, notes) VALUES ($1, 'resume', 'Employee resumed attendance')")
             .bind(sid)
             .execute(&state.db)
             .await

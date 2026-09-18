@@ -110,7 +110,9 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<any>(null);
-  const recordIntervalRef = useRef<any>(null);
+  const shouldConnectWsRef = useRef<boolean>(false);
+  const pendingChunksRef = useRef<Blob[]>([]);
+  const isUploadingRef = useRef<boolean>(false);
 
   useEffect(() => {
     // Check for interrupted/active session on load
@@ -133,6 +135,47 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
     }
     return () => clearInterval(timerRef.current);
   }, [isRecording, isPaused]);
+
+  const processUploadQueue = async (activeSessionId: string) => {
+    if (isUploadingRef.current) return;
+    if (pendingChunksRef.current.length === 0) return;
+
+    isUploadingRef.current = true;
+
+    if (pendingChunksRef.current.length > 5) {
+      const jitter = Math.random() * 5000; // 0 to 5 seconds jitter
+      await new Promise(r => setTimeout(r, jitter));
+    }
+
+    while (pendingChunksRef.current.length > 0) {
+      const chunk = pendingChunksRef.current[0];
+      try {
+        console.log(`Uploading queued chunk of size: ${chunk.size} bytes. (${pendingChunksRef.current.length} remaining)`);
+        await axios.post(
+          `${BACKEND_URL}/api/employee/recordings/upload/${activeSessionId}`,
+          chunk,
+          {
+            headers: {
+              'Authorization': `Bearer ${sessionToken}`,
+              'Content-Type': 'video/webm'
+            },
+            timeout: 60000 // 60s timeout for reliable chunk uploads
+          }
+        );
+
+        pendingChunksRef.current.shift();
+
+        if (pendingChunksRef.current.length > 0) {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      } catch (uploadError) {
+        console.error("Failed to upload chunk, will retry on next interval.", uploadError);
+        break;
+      }
+    }
+
+    isUploadingRef.current = false;
+  };
 
   const startRecording = async () => {
     if (isProcessing) return;
@@ -165,130 +208,87 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       });
       const newSessionId = checkInRes.data.session_id;
       setSessionId(newSessionId);
+      shouldConnectWsRef.current = true;
 
-      // 3. Open Real-time WebSocket connection for Admin Live Presence
-      const wsUrl = BACKEND_URL.replace('http', 'ws');
-      const ws = new WebSocket(`${wsUrl}/api/realtime/ws?token=${sessionToken}`);
-      ws.onopen = () => {
-        console.log("WebSocket connected for Real-time presence and live view.");
-        
-        // Ping every 30 seconds
-        const pingInterval = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'ping' }));
-          }
-        }, 30000);
-        
-        // Start Live View screenshot capture every 3 seconds
-        const videoEl = document.createElement('video');
-        videoEl.srcObject = stream;
-        videoEl.play();
-        const canvas = document.createElement('canvas');
-        canvas.width = 854;
-        canvas.height = 480;
-        
-        const liveViewInterval = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN && videoEl.videoWidth > 0) {
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-              // Compress moderately (0.6 quality) for better visuals while keeping bandwidth reasonable
-              const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
-              ws.send(JSON.stringify({
-                type: 'screenshot',
-                data: dataUrl
-              }));
+      // 3. Open Real-time WebSocket connection with auto-reconnect
+      const connectWebSocket = (mediaStream: MediaStream) => {
+        if (!shouldConnectWsRef.current) return;
+        const wsUrl = BACKEND_URL.replace('http', 'ws');
+        const ws = new WebSocket(`${wsUrl}/api/realtime/ws?token=${sessionToken}`);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          console.log("WebSocket connected for Real-time presence and live view.");
+          ws.send(JSON.stringify({ type: 'ping' }));
+
+          // Ping every 15 seconds
+          const pingInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: 'ping' }));
             }
+          }, 15000);
+
+          // Live View screenshot capture
+          const videoEl = document.createElement('video');
+          videoEl.srcObject = mediaStream;
+          videoEl.play();
+          const canvas = document.createElement('canvas');
+          canvas.width = 854;
+          canvas.height = 480;
+
+          // Live View screenshot capture every 2 seconds at 0.5 quality for optimal bandwidth
+          const liveViewInterval = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN && videoEl.videoWidth > 0) {
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+                ws.send(JSON.stringify({
+                  type: 'screenshot',
+                  data: dataUrl
+                }));
+              }
+            }
+          }, 2000);
+
+          ws.addEventListener('close', () => {
+            clearInterval(pingInterval);
+            clearInterval(liveViewInterval);
+            videoEl.pause();
+            videoEl.srcObject = null;
+          });
+        };
+
+        ws.onclose = () => {
+          console.log("WebSocket closed.");
+          if (shouldConnectWsRef.current) {
+            console.log("WebSocket connection lost. Reconnecting in 5 seconds...");
+            setTimeout(() => {
+              if (shouldConnectWsRef.current) {
+                connectWebSocket(mediaStream);
+              }
+            }, 5000);
           }
-        }, 1000); // 1 FPS
-
-        ws.addEventListener('close', () => {
-          clearInterval(pingInterval);
-          clearInterval(liveViewInterval);
-          videoEl.pause();
-          videoEl.srcObject = null;
-        });
+        };
       };
-      ws.onclose = () => console.log("WebSocket closed.");
-      wsRef.current = ws;
 
-      // 4. Start MediaRecorder
+      connectWebSocket(stream);
+
+      // 4. Start MediaRecorder with 10-second continuous timeslices
       const recorder = new MediaRecorder(stream, { 
         mimeType: 'video/webm; codecs=vp9',
         videoBitsPerSecond: 100000 // 100 kbps to drastically reduce file sizes
       });
       mediaRecorderRef.current = recorder;
 
-      // In-memory queue to store chunks when internet drops
-      const pendingChunks: Blob[] = [];
-      let isUploading = false;
-
-      const processUploadQueue = async () => {
-        if (isUploading) return;
-        if (pendingChunks.length === 0) return;
-        
-        isUploading = true;
-
-        // Thundering Herd Prevention: 
-        // If we have a large backlog (e.g. > 5 chunks = 50+ seconds offline),
-        // we add a random jitter delay before bursting to the server.
-        if (pendingChunks.length > 5) {
-          const jitter = Math.random() * 30000; // 0 to 30 seconds
-          console.log(`Backlog detected. Adding jitter delay of ${Math.round(jitter/1000)}s before uploading...`);
-          await new Promise(r => setTimeout(r, jitter));
-        }
-
-        while (pendingChunks.length > 0) {
-          const chunk = pendingChunks[0];
-          try {
-            console.log(`Uploading queued chunk of size: ${chunk.size} bytes. (${pendingChunks.length} remaining)`);
-            await axios.post(
-              `${BACKEND_URL}/api/employee/recordings/upload/${newSessionId}`,
-              chunk,
-              {
-                headers: {
-                  'Authorization': `Bearer ${sessionToken}`,
-                  'Content-Type': 'video/webm'
-                },
-                timeout: 10000 // 10s timeout so it fails quickly if still offline
-              }
-            );
-            
-            // Success! Remove the chunk from the queue.
-            pendingChunks.shift();
-
-            // Pacing: Wait 1 second between uploading chunks to prevent hammering the server
-            if (pendingChunks.length > 0) {
-              await new Promise(r => setTimeout(r, 1000));
-            }
-          } catch (uploadError) {
-            console.error("Failed to upload chunk, internet may still be down. Keeping in queue.", uploadError);
-            // Break the loop. We'll try again on the next 10-second chunk generation.
-            break;
-          }
-        }
-
-        isUploading = false;
-      };
-
       recorder.ondataavailable = async (e) => {
         if (e.data.size > 0 && newSessionId) {
-          pendingChunks.push(e.data);
-          processUploadQueue();
+          pendingChunksRef.current.push(e.data);
+          processUploadQueue(newSessionId);
         }
       };
 
-      // Instead of starting with a timeslice, we will manually stop and start the 
-      // recorder every 60 seconds (1 minute). This drastically reduces server load 
-      // and guarantees independent playable WebM chunks.
-      recorder.start();
-      
-      recordIntervalRef.current = setInterval(() => {
-        if (recorder.state === 'recording') {
-          recorder.stop();
-          recorder.start();
-        }
-      }, 60000); // 60 seconds
+      recorder.start(10000); // Continuous recording with 10-second timeslices
 
       setIsRecording(true);
       setIsPaused(false);
@@ -342,25 +342,35 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
     setIsProcessing(true);
     setError(null);
 
-    // Stop recording chunks
-    if (recordIntervalRef.current) {
-      clearInterval(recordIntervalRef.current);
-      recordIntervalRef.current = null;
-    }
-
-    // Stop recording engine
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
-    }
-    
-    // Close Real-time socket
+    shouldConnectWsRef.current = false;
     if (wsRef.current) {
       wsRef.current.close();
     }
 
-    // Check Out via API
-    if (sessionId) {
+    const activeSessionId = sessionId;
+
+    // 1. Stop recording engine (triggers final ondataavailable chunk)
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+
+    // 2. Flush remaining pending chunks to server before checkout
+    if (activeSessionId) {
+      console.log("Flushing remaining recording chunks before check-out...");
+      let waitAttempts = 0;
+      while ((pendingChunksRef.current.length > 0 || isUploadingRef.current) && waitAttempts < 60) {
+        await processUploadQueue(activeSessionId);
+        if (pendingChunksRef.current.length > 0 || isUploadingRef.current) {
+          await new Promise(r => setTimeout(r, 1000));
+        }
+        waitAttempts++;
+      }
+      console.log("Queue flush complete.");
+    }
+
+    // 3. Check Out via API
+    if (activeSessionId) {
       try {
         await axios.post(`${BACKEND_URL}/api/employee/check-out`, {}, {
           headers: { Authorization: `Bearer ${sessionToken}` }

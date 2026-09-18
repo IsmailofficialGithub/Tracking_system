@@ -44,6 +44,7 @@ async fn main() {
         .nest("/api/realtime", routes::realtime::realtime_routes())
         .nest("/api/config", routes::config::config_routes())
         .with_state(state)
+        .layer(axum::extract::DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(tower_http::cors::CorsLayer::permissive());
 
     let port = env::var("PORT").unwrap_or_else(|_| "3000".to_string());

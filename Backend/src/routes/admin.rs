@@ -102,7 +102,7 @@ async fn get_live_screenshot(
     if let Some(data) = state.live_screenshots.get(&session_id) {
         Ok(data.clone())
     } else {
-        Err(StatusCode::NOT_FOUND)
+        Ok("".to_string())
     }
 }
 

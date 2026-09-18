@@ -107,6 +107,9 @@ pub enum SessionEvent {
     CheckOut,
     Offline,
     AutoCheckout,
+    ConnectionLost,
+    AppClosed,
+    Reconnected,
 }
 
 #[allow(dead_code)]
@@ -116,4 +119,5 @@ pub struct SessionLog {
     pub session_id: Uuid,
     pub event_type: SessionEvent,
     pub event_time: DateTime<Utc>,
+    pub notes: Option<String>,
 }

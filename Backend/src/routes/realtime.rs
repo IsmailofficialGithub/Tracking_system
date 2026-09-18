@@ -40,12 +40,28 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
     // Connection established
     state.online_employees.insert(employee_id, true);
 
-    // Restore interrupted sessions
-    sqlx::query("UPDATE public.sessions SET status = 'on_time' WHERE employee_id = $1 AND check_out_at IS NULL AND status = 'interrupted'")
-        .bind(employee_id)
-        .execute(&state.db)
-        .await
-        .ok();
+    // Restore interrupted sessions and log reconnected event if active session exists
+    let active_sid = sqlx::query_scalar::<_, Uuid>(
+        "SELECT id FROM public.sessions WHERE employee_id = $1 AND check_out_at IS NULL LIMIT 1"
+    )
+    .bind(employee_id)
+    .fetch_optional(&state.db)
+    .await
+    .unwrap_or(None);
+
+    if let Some(sid) = active_sid {
+        sqlx::query("UPDATE public.sessions SET status = 'on_time' WHERE id = $1 AND status = 'interrupted'")
+            .bind(sid)
+            .execute(&state.db)
+            .await
+            .ok();
+
+        sqlx::query("INSERT INTO public.session_logs (session_id, event_type, notes) VALUES ($1, 'reconnected', 'Employee desktop app reconnected to server')")
+            .bind(sid)
+            .execute(&state.db)
+            .await
+            .ok();
+    }
 
     // Optional: Broadcast to admins here (could use a broadcast channel in AppState in the future)
     let _ = sender
@@ -60,9 +76,17 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
                 break;
             }
             Ok(Some(Ok(msg))) => {
+                // Restore interrupted session to on_time on any active websocket message
+                sqlx::query("UPDATE public.sessions SET status = 'on_time' WHERE employee_id = $1 AND check_out_at IS NULL AND status = 'interrupted'")
+                    .bind(employee_id)
+                    .execute(&state.db)
+                    .await
+                    .ok();
+
                 if let Message::Text(text) = msg {
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {
-                        if val.get("type").and_then(|t| t.as_str()) == Some("screenshot") {
+                        let msg_type = val.get("type").and_then(|t| t.as_str());
+                        if msg_type == Some("screenshot") {
                             if let Some(data) = val.get("data").and_then(|d| d.as_str()) {
                                 // Fetch active session
                                 if let Ok(Some(sid)) = sqlx::query_scalar::<_, Uuid>(
@@ -74,6 +98,8 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
                                     state.live_screenshots.insert(sid, data.to_string());
                                 }
                             }
+                        } else if msg_type == Some("ping") {
+                            let _ = sender.send(Message::Text(r#"{"type":"pong"}"#.into())).await;
                         }
                     }
                 }
@@ -85,7 +111,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
         }
     }
 
-    // Connection closed - perform auto check-out
+    // Connection closed - perform auto check-out / mark interrupted
     state.online_employees.remove(&employee_id);
 
     let now = Utc::now();
@@ -105,9 +131,10 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
 
     match session_id {
         Ok(Some(sid)) => {
-            println!("Auto check-out successful for employee {}", employee_id);
+            println!("Connection lost / interrupted for employee {}", employee_id);
+            state.live_screenshots.remove(&sid);
             // Insert log for timeline
-            sqlx::query("INSERT INTO public.session_logs (session_id, event_type, event_time) VALUES ($1, 'offline', $2)")
+            sqlx::query("INSERT INTO public.session_logs (session_id, event_type, event_time, notes) VALUES ($1, 'connection_lost', $2, 'Internet connection lost or App closed / PC shut down')")
                 .bind(sid)
                 .bind(now)
                 .execute(&state.db)
@@ -118,7 +145,7 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
             // No active session found
         },
         Err(e) => {
-            eprintln!("Failed to auto check-out employee {}: {}", employee_id, e);
+            eprintln!("Failed to mark session interrupted for employee {}: {}", employee_id, e);
         }
     }
 }

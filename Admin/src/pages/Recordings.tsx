@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { getLogEventDetails } from '../utils/logFormatter';
 import './Recordings.css';
 
 interface Recording {
@@ -164,17 +165,21 @@ const Recordings: React.FC = () => {
               {sessionLogs.length === 0 ? (
                 <p className="text-muted text-sm">No logs found.</p>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '180px', overflowY: 'auto' }}>
-                  {sessionLogs.map(log => {
-                    const eventColors: Record<string, string> = { check_in: '#10b981', pause: '#f59e0b', resume: '#3b82f6', check_out: '#ef4444' };
-                    const eventLabels: Record<string, string> = { check_in: 'Checked In', pause: 'Paused Shift', resume: 'Resumed Shift', check_out: 'Checked Out' };
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '200px', overflowY: 'auto' }}>
+                  {sessionLogs.map((log: any) => {
+                    const { color, label, description } = getLogEventDetails(log);
                     return (
-                      <div key={log.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.2)', padding: '0.5rem 0.75rem', borderRadius: '6px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                          <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: eventColors[log.event_type] || '#ccc' }} />
-                          <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{eventLabels[log.event_type] || log.event_type}</span>
+                      <div key={log.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', background: 'rgba(0,0,0,0.2)', padding: '0.6rem 0.8rem', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: color }} />
+                            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>{label}</span>
+                          </div>
+                          {description && (
+                            <span className="text-muted" style={{ fontSize: '0.8rem', paddingLeft: '1rem' }}>{description}</span>
+                          )}
                         </div>
-                        <span className="text-muted" style={{ fontSize: '0.85rem' }}>{new Date(log.event_time).toLocaleTimeString()}</span>
+                        <span className="text-muted" style={{ fontSize: '0.85rem', whiteSpace: 'nowrap' }}>{new Date(log.event_time).toLocaleTimeString()}</span>
                       </div>
                     );
                   })}
