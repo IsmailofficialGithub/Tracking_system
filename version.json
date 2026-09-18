@@ -3,10 +3,6 @@
   "minimum_version": "1.0.0",
   "build_number": 4,
   "minimum_build_number": 4,
-  "features": [
-    "Fix disconnect problem"
-  ],
-  "bug_fixes": [
-    "Fix Disconnect problem"
-  ]
+  "features": [],
+  "bug_fixes": []
 }
