@@ -177,16 +177,12 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
     isUploadingRef.current = false;
   };
 
-  const startRecording = async () => {
-    if (isProcessing) return;
-    setIsProcessing(true);
-    setError(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+
+  const obtainScreenStream = async (): Promise<MediaStream | null> => {
     try {
-      // 1. MUST FIRST verify screen capture permission BEFORE check-in
       const sourceId = await (window as any).electronAPI.getScreenSource();
-      if (!sourceId) {
-        throw new Error("Permission required to start your shift.");
-      }
+      if (!sourceId) return null;
 
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
@@ -202,6 +198,70 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
         } as any
       });
 
+      return stream;
+    } catch (err) {
+      console.error("Failed to obtain screen capture stream:", err);
+      return null;
+    }
+  };
+
+  const isStreamActive = (stream: MediaStream | null): boolean => {
+    if (!stream) return false;
+    const tracks = stream.getVideoTracks();
+    return tracks.length > 0 && tracks.some(t => t.readyState === 'live' && t.enabled);
+  };
+
+  const startMediaRecorder = (stream: MediaStream, activeSessionId: string) => {
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        try { mediaRecorderRef.current.stop(); } catch (e) {}
+      }
+
+      const recorder = new MediaRecorder(stream, { 
+        mimeType: 'video/webm; codecs=vp9',
+        videoBitsPerSecond: 100000 // 100 kbps to drastically reduce file sizes
+      });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = async (e) => {
+        if (e.data.size > 0 && activeSessionId) {
+          pendingChunksRef.current.push(e.data);
+          processUploadQueue(activeSessionId);
+        }
+      };
+
+      // Auto-recover if stream track ends unexpectedly (e.g., system sleep or resolution change)
+      stream.getVideoTracks().forEach(track => {
+        track.onended = async () => {
+          console.warn("Screen stream track ended. Attempting automatic recovery...");
+          if (shouldConnectWsRef.current) {
+            const newStream = await obtainScreenStream();
+            if (newStream) {
+              mediaStreamRef.current = newStream;
+              startMediaRecorder(newStream, activeSessionId);
+            }
+          }
+        };
+      });
+
+      recorder.start(10000); // Continuous recording with 10-second timeslices
+    } catch (recErr) {
+      console.error("Error starting MediaRecorder:", recErr);
+    }
+  };
+
+  const startRecording = async () => {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    setError(null);
+    try {
+      // 1. MUST FIRST verify screen capture permission BEFORE check-in
+      const stream = await obtainScreenStream();
+      if (!stream) {
+        throw new Error("Permission required to start your shift.");
+      }
+      mediaStreamRef.current = stream;
+
       // 2. Screen capture granted -> Now call Check In API
       const checkInRes = await axios.post(`${BACKEND_URL}/api/employee/check-in`, {}, {
         headers: { Authorization: `Bearer ${sessionToken}` }
@@ -210,85 +270,102 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
       setSessionId(newSessionId);
       shouldConnectWsRef.current = true;
 
-      // 3. Open Real-time WebSocket connection with auto-reconnect
-      const connectWebSocket = (mediaStream: MediaStream) => {
+      // 3. Open Real-time WebSocket connection with self-healing auto-reconnect
+      const connectWebSocket = () => {
         if (!shouldConnectWsRef.current) return;
+        if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
+          return;
+        }
+
         const wsUrl = BACKEND_URL.replace('http', 'ws');
         const ws = new WebSocket(`${wsUrl}/api/realtime/ws?token=${sessionToken}`);
         wsRef.current = ws;
+
+        let pingInterval: any = null;
+        let liveViewInterval: any = null;
+
+        const videoEl = document.createElement('video');
+        const canvas = document.createElement('canvas');
+        canvas.width = 854;
+        canvas.height = 480;
 
         ws.onopen = () => {
           console.log("WebSocket connected for Real-time presence and live view.");
           ws.send(JSON.stringify({ type: 'ping' }));
 
-          // Ping every 15 seconds
-          const pingInterval = setInterval(() => {
+          // Ping every 10 seconds to maintain active presence
+          pingInterval = setInterval(() => {
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(JSON.stringify({ type: 'ping' }));
             }
-          }, 15000);
+          }, 10000);
 
-          // Live View screenshot capture
-          const videoEl = document.createElement('video');
-          videoEl.srcObject = mediaStream;
-          videoEl.play();
-          const canvas = document.createElement('canvas');
-          canvas.width = 854;
-          canvas.height = 480;
+          // Live View screenshot capture every 2 seconds at 0.5 quality
+          liveViewInterval = setInterval(async () => {
+            if (ws.readyState !== WebSocket.OPEN || !shouldConnectWsRef.current) return;
 
-          // Live View screenshot capture every 2 seconds at 0.5 quality for optimal bandwidth
-          const liveViewInterval = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN && videoEl.videoWidth > 0) {
-              const ctx = canvas.getContext('2d');
-              if (ctx) {
-                ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-                const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
-                ws.send(JSON.stringify({
-                  type: 'screenshot',
-                  data: dataUrl
-                }));
+            let currentStream = mediaStreamRef.current;
+            if (!isStreamActive(currentStream)) {
+              console.warn("Screen capture stream is inactive. Re-acquiring stream...");
+              currentStream = await obtainScreenStream();
+              if (currentStream) {
+                mediaStreamRef.current = currentStream;
+                if (newSessionId) {
+                  startMediaRecorder(currentStream, newSessionId);
+                }
+              }
+            }
+
+            if (currentStream) {
+              if (videoEl.srcObject !== currentStream) {
+                videoEl.srcObject = currentStream;
+                videoEl.play().catch(() => {});
+              }
+
+              if (videoEl.videoWidth > 0) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                  ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+                  const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+                  ws.send(JSON.stringify({
+                    type: 'screenshot',
+                    data: dataUrl
+                  }));
+                }
               }
             }
           }, 2000);
+        };
 
-          ws.addEventListener('close', () => {
-            clearInterval(pingInterval);
-            clearInterval(liveViewInterval);
-            videoEl.pause();
-            videoEl.srcObject = null;
-          });
+        const cleanup = () => {
+          if (pingInterval) clearInterval(pingInterval);
+          if (liveViewInterval) clearInterval(liveViewInterval);
+          videoEl.pause();
+          videoEl.srcObject = null;
         };
 
         ws.onclose = () => {
+          cleanup();
           console.log("WebSocket closed.");
           if (shouldConnectWsRef.current) {
-            console.log("WebSocket connection lost. Reconnecting in 5 seconds...");
+            console.log("WebSocket connection lost. Reconnecting in 3 seconds...");
             setTimeout(() => {
               if (shouldConnectWsRef.current) {
-                connectWebSocket(mediaStream);
+                connectWebSocket();
               }
-            }, 5000);
+            }, 3000);
           }
+        };
+
+        ws.onerror = (err) => {
+          console.error("WebSocket error:", err);
         };
       };
 
-      connectWebSocket(stream);
+      connectWebSocket();
 
       // 4. Start MediaRecorder with 10-second continuous timeslices
-      const recorder = new MediaRecorder(stream, { 
-        mimeType: 'video/webm; codecs=vp9',
-        videoBitsPerSecond: 100000 // 100 kbps to drastically reduce file sizes
-      });
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = async (e) => {
-        if (e.data.size > 0 && newSessionId) {
-          pendingChunksRef.current.push(e.data);
-          processUploadQueue(newSessionId);
-        }
-      };
-
-      recorder.start(10000); // Continuous recording with 10-second timeslices
+      startMediaRecorder(stream, newSessionId);
 
       setIsRecording(true);
       setIsPaused(false);
@@ -353,6 +430,11 @@ function Dashboard({ backendUrl: BACKEND_URL, sessionToken, onLogout, isRecordin
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
       mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+    }
+
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(track => track.stop());
+      mediaStreamRef.current = null;
     }
 
     // 2. Flush remaining pending chunks to server before checkout

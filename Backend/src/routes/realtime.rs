@@ -41,16 +41,38 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
     state.online_employees.insert(employee_id, true);
 
     // Restore interrupted sessions and log reconnected event if active session exists
-    let active_sid = sqlx::query_scalar::<_, Uuid>(
-        "SELECT id FROM public.sessions WHERE employee_id = $1 AND check_out_at IS NULL LIMIT 1"
+    let active_session = sqlx::query_as::<_, (Uuid, chrono::DateTime<Utc>, Uuid)>(
+        r#"
+        SELECT s.id, s.check_in_at, s.shift_template_id 
+        FROM public.sessions s 
+        WHERE s.employee_id = $1 AND s.check_out_at IS NULL 
+        LIMIT 1
+        "#
     )
     .bind(employee_id)
     .fetch_optional(&state.db)
     .await
     .unwrap_or(None);
 
-    if let Some(sid) = active_sid {
-        sqlx::query("UPDATE public.sessions SET status = 'on_time' WHERE id = $1 AND status = 'interrupted'")
+    if let Some((sid, check_in_at, shift_template_id)) = active_session {
+        let shift = sqlx::query_as::<_, crate::models::ShiftTemplate>(
+            "SELECT * FROM public.shift_templates WHERE id = $1"
+        )
+        .bind(shift_template_id)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten();
+
+        let restored_status = if let Some(ref s) = shift {
+            crate::services::shift_rules::evaluate_check_in_status(check_in_at, s)
+                .unwrap_or(crate::models::SessionStatus::OnTime)
+        } else {
+            crate::models::SessionStatus::OnTime
+        };
+
+        sqlx::query("UPDATE public.sessions SET status = $1::session_status WHERE id = $2 AND status = 'interrupted'")
+            .bind(restored_status)
             .bind(sid)
             .execute(&state.db)
             .await
@@ -76,12 +98,33 @@ async fn handle_socket(socket: WebSocket, state: AppState, employee_id: Uuid) {
                 break;
             }
             Ok(Some(Ok(msg))) => {
-                // Restore interrupted session to on_time on any active websocket message
-                sqlx::query("UPDATE public.sessions SET status = 'on_time' WHERE employee_id = $1 AND check_out_at IS NULL AND status = 'interrupted'")
-                    .bind(employee_id)
-                    .execute(&state.db)
+                // Maintain online state and restore session status if needed
+                state.online_employees.insert(employee_id, true);
+
+                if let Some((sid, check_in_at, shift_template_id)) = active_session {
+                    let shift = sqlx::query_as::<_, crate::models::ShiftTemplate>(
+                        "SELECT * FROM public.shift_templates WHERE id = $1"
+                    )
+                    .bind(shift_template_id)
+                    .fetch_optional(&state.db)
                     .await
-                    .ok();
+                    .ok()
+                    .flatten();
+
+                    let restored_status = if let Some(ref s) = shift {
+                        crate::services::shift_rules::evaluate_check_in_status(check_in_at, s)
+                            .unwrap_or(crate::models::SessionStatus::OnTime)
+                    } else {
+                        crate::models::SessionStatus::OnTime
+                    };
+
+                    sqlx::query("UPDATE public.sessions SET status = $1::session_status WHERE id = $2 AND status = 'interrupted'")
+                        .bind(restored_status)
+                        .bind(sid)
+                        .execute(&state.db)
+                        .await
+                        .ok();
+                }
 
                 if let Message::Text(text) = msg {
                     if let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) {

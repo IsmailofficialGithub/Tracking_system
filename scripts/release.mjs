@@ -35,7 +35,7 @@ function runCommand(command, cwd = ROOT_DIR) {
 async function checkAuth() {
   console.log('Checking GitHub authentication...');
   let hasToken = false;
-  
+
   try {
     const envContent = readFileSync(ENV_FILE, 'utf-8');
     if (envContent.includes('GITHUB_TOKEN=')) {
@@ -62,7 +62,7 @@ async function checkAuth() {
 
 async function main() {
   console.log('🚀 Starting ChronoTrack Release Wizard...\n');
-  
+
   await checkAuth();
 
   // Read current configs
@@ -78,14 +78,14 @@ async function main() {
   console.log(`- Minimum Build Number: ${versionData.minimum_build_number}`);
 
   console.log('\n--- Configuration ---');
-  
+
   const newVersion = await prompt(`New App Version (Press enter to keep ${packageData.version}): `) || packageData.version;
   const currentBuild = packageData.buildNumber || 1;
   const newBuildStr = await prompt(`New Build Number (Press enter to keep ${currentBuild + 1}): `);
   const newBuild = newBuildStr ? parseInt(newBuildStr) : currentBuild + 1;
 
   const isHardUpdate = (await prompt('Is this a mandatory/hard update? (y/N): ')).toLowerCase() === 'y';
-  
+
   let newMinVersion = versionData.minimum_version;
   let newMinBuild = versionData.minimum_build_number;
 
@@ -109,7 +109,7 @@ async function main() {
 
   // Update Files
   console.log('\nUpdating configuration files...');
-  
+
   packageData.version = newVersion;
   packageData.buildNumber = newBuild;
   writeFileSync(PACKAGE_FILE, JSON.stringify(packageData, null, 2));
@@ -136,22 +136,23 @@ async function main() {
 
   // Build
   console.log('\nBuilding the Electron app. This may take a moment...');
-  execSync('npm run electron:build', { cwd: FRONTEND_DIR, stdio: 'inherit' });
+  execSync('npm run electron:build', { cwd: FRONTEND_DIR, stdio: 'inherit', env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=8192' } });
   console.log('✅ Build complete.');
 
   // Publish Release
   console.log('\nPublishing GitHub Release...');
   const tagName = `v${newVersion}-build${newBuild}`;
-  const releaseTitle = `ChronoTrack ${newVersion} (Build ${newBuild})`;
-  const exeFile = `release/ChronoTrack Setup ${newVersion}.exe`;
-  
+  const releaseTitle = `Exiomra Tracking System ${newVersion} (Build ${newBuild})`;
+  const productName = packageData.build?.productName || 'Exiomra Tracking System';
+  const exeFile = join(FRONTEND_DIR, 'release', `${productName} Setup ${newVersion}.exe`);
+
   let notes = "";
   if (features.length > 0) notes += `### New Features\n- ${features.join('\n- ')}\n\n`;
   if (bug_fixes.length > 0) notes += `### Bug Fixes\n- ${bug_fixes.join('\n- ')}\n`;
   if (!notes) notes = "Minor updates and improvements.";
 
   const ghCommand = `gh release create "${tagName}" "${exeFile}" --title "${releaseTitle}" --notes "${notes}"`;
-  
+
   // Note: we run the gh command in the FRONTEND_DIR where the release/ folder is generated.
   try {
     execSync(ghCommand, { cwd: FRONTEND_DIR, stdio: 'inherit' });
