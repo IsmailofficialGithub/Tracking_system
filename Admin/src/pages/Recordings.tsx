@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import LiveVideoPlayer from '../components/LiveVideoPlayer';
 import { getLogEventDetails } from '../utils/logFormatter';
 import './Recordings.css';
 
@@ -34,6 +35,13 @@ const Recordings: React.FC = () => {
   const [filter, setFilter] = useState('');
   const [timeFilter, setTimeFilter] = useState<number>(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [activeSessionsMap, setActiveSessionsMap] = useState<Record<string, string>>({});
+  const [viewMode, setViewMode] = useState<'recording' | 'live'>('recording');
+
+  const getEmployeeId = (r: Recording) => {
+    if (r.id.includes('_')) return r.id.split('_')[0];
+    return '';
+  };
 
   const handleDelete = async (ids: string[]) => {
     if (!window.confirm(`Are you sure you want to delete ${ids.length} recording(s)?\n\nThis will permanently remove the video files from the server, but keep the time tracking session log intact.`)) return;
@@ -52,7 +60,21 @@ const Recordings: React.FC = () => {
   };
 
   useEffect(() => {
+    // Check for active sessions across midnight
+    api.get('/admin/sessions')
+      .then(r => {
+        const map: Record<string, string> = {};
+        r.data.filter((s: any) => !s.check_out_at).forEach((s: any) => {
+          map[s.employee_id] = s.id;
+        });
+        setActiveSessionsMap(map);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     if (playing) {
+      setViewMode('recording');
       api.get(`/admin/sessions/${playing.session_id}/logs`)
         .then(r => setSessionLogs(r.data))
         .catch(console.error);
@@ -86,7 +108,9 @@ const Recordings: React.FC = () => {
 
   const videoUrl = (r: Recording) => {
     const token = localStorage.getItem('admin_token');
-    return `${baseUrl}/employee/recordings/stream/${r.id}?token=${token}`;
+    const empId = getEmployeeId(r);
+    const isLive = Boolean(activeSessionsMap[empId]);
+    return `${baseUrl}/employee/recordings/stream/${r.id}?token=${token}${isLive ? '&live=true' : ''}`;
   };
 
   return (
@@ -153,13 +177,39 @@ const Recordings: React.FC = () => {
                 <button className="btn btn-outline" onClick={() => setPlaying(null)}>✕ Close</button>
               </div>
             </div>
-            <video
-              key={playing.id}
-              controls
-              autoPlay
-              className="recording-video"
-              src={videoUrl(playing)}
-            />
+
+            {/* Mode Toggle if user is currently active */}
+            {activeSessionsMap[getEmployeeId(playing)] && (
+              <div style={{ display: 'flex', gap: '8px', padding: '0 1rem 0.75rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                <button 
+                  className={`btn btn-sm ${viewMode === 'recording' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setViewMode('recording')}
+                >
+                  📼 Recorded Playback
+                </button>
+                <button 
+                  className={`btn btn-sm ${viewMode === 'live' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setViewMode('live')}
+                >
+                  🔴 Live Screen Feed (Active Now)
+                </button>
+              </div>
+            )}
+
+            {viewMode === 'live' && activeSessionsMap[getEmployeeId(playing)] ? (
+              <div style={{ padding: '1rem' }}>
+                <LiveVideoPlayer sessionId={activeSessionsMap[getEmployeeId(playing)]} />
+              </div>
+            ) : (
+              <video
+                key={playing.id}
+                controls
+                autoPlay
+                className="recording-video"
+                src={videoUrl(playing)}
+              />
+            )}
+
             <div style={{ padding: '1rem', background: 'rgba(0,0,0,0.1)' }}>
               <h4 style={{ marginBottom: '0.75rem' }}>Day Logs (Timeline)</h4>
               {sessionLogs.length === 0 ? (
@@ -194,39 +244,47 @@ const Recordings: React.FC = () => {
         <div className="loading">Loading recordings...</div>
       ) : (
         <div className="recordings-grid">
-          {filtered.map(r => (
-            <div key={r.id} className="recording-card glass-panel" onClick={() => setPlaying(r)} style={{ position: 'relative' }}>
-              <input
-                type="checkbox"
-                style={{ position: 'absolute', top: '12px', left: '12px', zIndex: 10, width: '18px', height: '18px', cursor: 'pointer' }}
-                checked={selectedIds.includes(r.id)}
-                onChange={(e) => {
-                  if (e.target.checked) setSelectedIds(prev => [...prev, r.id]);
-                  else setSelectedIds(prev => prev.filter(id => id !== r.id));
-                }}
-                onClick={e => e.stopPropagation()}
-              />
-              <button
-                className="btn btn-outline"
-                style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10, padding: '4px 8px', border: 'none', background: 'rgba(255,0,0,0.1)', color: '#ff4d4d', borderRadius: '4px' }}
-                onClick={(e) => { e.stopPropagation(); handleDelete([r.id]); }}
-                title="Delete Recording"
-              >
-                🗑
-              </button>
-              <div className="recording-thumb">
-                <div className="play-icon">▶</div>
-              </div>
-              <div className="recording-info">
-                <div className="td-name">{r.employee_name}</div>
-                <div className="text-muted text-sm">{r.employee_email}</div>
-                <div className="recording-meta">
-                  <span className="text-muted text-sm">{new Date(r.created_at).toLocaleDateString()}</span>
-                  <span className="badge">{formatSize(r.size_bytes)}</span>
+          {filtered.map(r => {
+            const isLiveNow = Boolean(activeSessionsMap[getEmployeeId(r)]);
+            return (
+              <div key={r.id} className="recording-card glass-panel" onClick={() => setPlaying(r)} style={{ position: 'relative' }}>
+                <input
+                  type="checkbox"
+                  style={{ position: 'absolute', top: '12px', left: '12px', zIndex: 10, width: '18px', height: '18px', cursor: 'pointer' }}
+                  checked={selectedIds.includes(r.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) setSelectedIds(prev => [...prev, r.id]);
+                    else setSelectedIds(prev => prev.filter(id => id !== r.id));
+                  }}
+                  onClick={e => e.stopPropagation()}
+                />
+                {isLiveNow && (
+                  <span style={{ position: 'absolute', top: '10px', right: '45px', zIndex: 10, background: 'rgba(34,197,94,0.2)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.4)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                    <span className="live-dot" style={{ margin: 0, width: '6px', height: '6px' }}>●</span> Live
+                  </span>
+                )}
+                <button
+                  className="btn btn-outline"
+                  style={{ position: 'absolute', top: '8px', right: '8px', zIndex: 10, padding: '4px 8px', border: 'none', background: 'rgba(255,0,0,0.1)', color: '#ff4d4d', borderRadius: '4px' }}
+                  onClick={(e) => { e.stopPropagation(); handleDelete([r.id]); }}
+                  title="Delete Recording"
+                >
+                  🗑
+                </button>
+                <div className="recording-thumb">
+                  <div className="play-icon">▶</div>
+                </div>
+                <div className="recording-info">
+                  <div className="td-name">{r.employee_name}</div>
+                  <div className="text-muted text-sm">{r.employee_email}</div>
+                  <div className="recording-meta">
+                    <span className="text-muted text-sm">{new Date(r.created_at).toLocaleDateString()}</span>
+                    <span className="badge">{formatSize(r.size_bytes)}</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
           {filtered.length === 0 && (
             <p className="text-muted empty-row">No recordings found.</p>
           )}

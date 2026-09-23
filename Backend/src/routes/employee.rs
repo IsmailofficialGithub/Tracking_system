@@ -68,13 +68,13 @@ async fn check_in(
         )
     })?;
 
-    // Check if there is an ongoing session that hasn't been checked out today
+    // Check if there is an ongoing unclosed session (including overnight shifts)
     let existing_session = sqlx::query_scalar::<_, Uuid>(
         r#"
         SELECT id FROM public.sessions 
         WHERE employee_id = $1 
           AND check_out_at IS NULL 
-          AND check_in_at >= CURRENT_DATE
+        ORDER BY check_in_at DESC
         LIMIT 1
         "#
     )

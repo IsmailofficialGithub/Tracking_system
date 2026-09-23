@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import LiveVideoPlayer from '../components/LiveVideoPlayer';
 import './Sessions.css';
 
 interface Session {
@@ -23,6 +24,7 @@ const Sessions: React.FC = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
+  const [selectedLiveSession, setSelectedLiveSession] = useState<Session | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -64,14 +66,23 @@ const Sessions: React.FC = () => {
     return `${h}h ${m}m`;
   };
 
-  const renderCheckOutCell = (checkOut: string | null, status: string) => {
-    if (checkOut) {
-      return new Date(checkOut).toLocaleString();
+  const renderCheckOutCell = (session: Session) => {
+    if (session.check_out_at) {
+      return new Date(session.check_out_at).toLocaleString();
     }
-    if (status === 'interrupted') {
+    if (session.status === 'interrupted') {
       return <span style={{ color: '#ef4444', fontWeight: 500 }}>⚠️ Disconnected</span>;
     }
-    return <span className="live-dot">● Live</span>;
+    return (
+      <button 
+        className="btn btn-primary btn-sm"
+        style={{ padding: '2px 8px', fontSize: '0.8rem', display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+        onClick={() => setSelectedLiveSession(session)}
+        title="Click to view real-time live screen"
+      >
+        <span className="live-dot" style={{ margin: 0 }}>●</span> Live (View)
+      </button>
+    );
   };
 
   return (
@@ -99,6 +110,27 @@ const Sessions: React.FC = () => {
         </div>
       </div>
 
+      {/* Live Screen Modal */}
+      {selectedLiveSession && (
+        <div className="modal-overlay" onClick={() => setSelectedLiveSession(null)}>
+          <div className="modal glass-panel" style={{ maxWidth: '720px', width: '90%' }} onClick={e => e.stopPropagation()}>
+            <div className="section-header" style={{ marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <div style={{ flex: 1, minWidth: '200px' }}>
+                <h3 style={{ wordBreak: 'break-word' }}>📺 Live Screen: {selectedLiveSession.employee_name}</h3>
+                <p className="text-muted text-sm" style={{ wordBreak: 'break-word' }}>{selectedLiveSession.employee_email} · Active Now</p>
+              </div>
+              <button className="btn btn-outline btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setSelectedLiveSession(null)}>✕ Close</button>
+            </div>
+            
+            <LiveVideoPlayer sessionId={selectedLiveSession.id} />
+
+            <p className="text-muted text-sm" style={{ marginTop: '0.75rem', textAlign: 'center' }}>
+              🔴 Real-time stream feed updates automatically from desktop client.
+            </p>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="loading">Loading sessions...</div>
       ) : (
@@ -121,7 +153,7 @@ const Sessions: React.FC = () => {
                     <div className="text-muted text-sm">{s.employee_email}</div>
                   </td>
                   <td className="text-muted">{new Date(s.check_in_at).toLocaleString()}</td>
-                  <td className="text-muted">{renderCheckOutCell(s.check_out_at, s.status)}</td>
+                  <td className="text-muted">{renderCheckOutCell(s)}</td>
                   <td className="text-muted">{duration(s.check_in_at, s.check_out_at, s.status)}</td>
                   <td><span className={statusBadge(s.status)}>{s.status.replace('_', ' ')}</span></td>
                 </tr>

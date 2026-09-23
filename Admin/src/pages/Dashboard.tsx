@@ -22,81 +22,7 @@ interface SessionLog {
   event_time: string;
 }
 
-const LiveVideoPlayer: React.FC<{ sessionId: string }> = ({ sessionId }) => {
-  const [imageSrc, setImageSrc] = useState<string | null>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      containerRef.current?.requestFullscreen().catch(console.error);
-    } else {
-      document.exitFullscreen();
-    }
-  };
-
-  useEffect(() => {
-    let isActive = true;
-    const fetchLatest = async () => {
-      try {
-        const token = localStorage.getItem('admin_token');
-        const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
-        const res = await fetch(`${baseUrl}/admin/live/${sessionId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok && isActive) {
-          const text = await res.text();
-          if (text.startsWith('data:image')) {
-            setImageSrc(text);
-          }
-        }
-      } catch (err) {
-        console.error('Failed to fetch live view', err);
-      }
-    };
-
-    fetchLatest();
-    const interval = setInterval(fetchLatest, 3000);
-    return () => {
-      isActive = false;
-      clearInterval(interval);
-    };
-  }, [sessionId]);
-
-  return (
-    <div ref={containerRef} style={{ background: '#000', borderRadius: isFullscreen ? '0' : '12px', overflow: 'hidden', minHeight: '360px', height: isFullscreen ? '100vh' : 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
-      {!imageSrc ? (
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', zIndex: 10, backdropFilter: 'blur(4px)' }}>
-          <div style={{ width: '40px', height: '40px', border: '3px solid rgba(255,255,255,0.2)', borderTopColor: 'var(--accent-primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-          <p style={{ marginTop: '1rem', color: 'white', fontWeight: 500 }}>Connecting to Live Feed...</p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      ) : (
-        <>
-          <img
-            src={imageSrc}
-            alt="Live Screen Feed"
-            style={{ width: '100%', height: '100%', maxHeight: isFullscreen ? '100vh' : '420px', objectFit: 'contain' }}
-          />
-          <button 
-            onClick={toggleFullscreen}
-            style={{ position: 'absolute', bottom: '15px', right: '15px', background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', borderRadius: '6px', padding: '6px 12px', cursor: 'pointer', zIndex: 20, fontSize: '0.85rem' }}
-          >
-            {isFullscreen ? 'Exit Fullscreen' : 'Fullscreen ⛶'}
-          </button>
-        </>
-      )}
-    </div>
-  );
-};
+import LiveVideoPlayer from '../components/LiveVideoPlayer';
 
 const Dashboard: React.FC = () => {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -127,12 +53,8 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const activeSessions = sessions
-    .filter(s => {
-      if (s.check_out_at) return false;
-      const today = new Date().toDateString();
-      return new Date(s.check_in_at).toDateString() === today;
-    })
-    // Sort descending so the most recent session is first!
+    .filter(s => !s.check_out_at)
+    // Sort descending so the most recent session is first
     .sort((a, b) => new Date(b.check_in_at).getTime() - new Date(a.check_in_at).getTime())
     .filter((session, index, self) => 
       index === self.findIndex((t) => t.employee_id === session.employee_id)
@@ -178,7 +100,10 @@ const Dashboard: React.FC = () => {
           <h3>Today's Sessions</h3>
           <div className="stat-value">{loading ? '–' : sessions.filter(s => {
             const today = new Date().toDateString();
-            return new Date(s.check_in_at).toDateString() === today;
+            // Count if checked in today, checked out today, or currently active overnight
+            const checkInDate = new Date(s.check_in_at).toDateString();
+            const checkOutDate = s.check_out_at ? new Date(s.check_out_at).toDateString() : null;
+            return checkInDate === today || checkOutDate === today || !s.check_out_at;
           }).length}</div>
         </div>
         <Link to="/sessions" className="card stat-card glass-panel link-card">
