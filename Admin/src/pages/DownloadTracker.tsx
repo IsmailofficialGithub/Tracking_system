@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Download, Package, Calendar, AlertCircle, Terminal, Shield, Laptop } from 'lucide-react';
+import { Download, Package, Calendar, AlertCircle, Terminal, Shield, Laptop, Link, Check } from 'lucide-react';
 import './DownloadTracker.css';
 
 interface ReleaseAsset {
@@ -24,6 +24,21 @@ const DownloadTracker: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'downloads' | 'guide'>('downloads');
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+
+  const handleCopyLink = (releaseId: number, tag: string) => {
+    // If the API URL is relative or we need the full origin, we can construct it
+    // but typically VITE_API_URL is an absolute URL in production.
+    let apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+    if (apiUrl.startsWith('/')) {
+      apiUrl = window.location.origin + apiUrl;
+    }
+    const url = `${apiUrl}/config/download/${tag}`;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedId(releaseId);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  };
 
   useEffect(() => {
     const fetchReleases = async () => {
@@ -66,7 +81,7 @@ const DownloadTracker: React.FC = () => {
           </div>
           <div className="header-text">
             <h1>Tracker Distribution Center</h1>
-            <p>Deploy, manage, and download the Exiomra Employee Tracking agent.</p>
+            <p>Deploy, manage, and download the Axiomra Employee Tracking agent.</p>
           </div>
         </div>
       </div>
@@ -130,20 +145,30 @@ const DownloadTracker: React.FC = () => {
                       </div>
                       
                       {exeAsset ? (
-                        <a 
-                          href={exeAsset.browser_download_url} 
-                          className="btn-download-premium"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <div className="btn-icon">
-                            <Download size={18} />
-                          </div>
-                          <div className="btn-text">
-                            <span className="btn-title">Download for Windows</span>
-                            <span className="btn-subtitle">Executable • {formatSize(exeAsset.size)}</span>
-                          </div>
-                        </a>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                          <a 
+                            href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api'}/config/download/${release.tag_name}`}
+                            className="btn-download-premium"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <div className="btn-icon">
+                              <Download size={18} />
+                            </div>
+                            <div className="btn-text">
+                              <span className="btn-title">Download for Windows</span>
+                              <span className="btn-subtitle">Executable • {formatSize(exeAsset.size)}</span>
+                            </div>
+                          </a>
+                          <button
+                            onClick={() => handleCopyLink(release.id, release.tag_name)}
+                            className="btn-download-premium"
+                            style={{ padding: '0 16px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)' }}
+                            title="Copy Download Link"
+                          >
+                            {copiedId === release.id ? <Check size={20} color="#10b981" /> : <Link size={20} color="var(--text-main)" />}
+                          </button>
+                        </div>
                       ) : (
                         <div className="missing-asset-badge">
                           <AlertCircle size={16} />
@@ -214,7 +239,7 @@ const DownloadTracker: React.FC = () => {
                   <Shield size={24} />
                 </div>
                 <h3>Security & Privacy Posture</h3>
-                <p>The Exiomra Tracking System is designed with strict privacy boundaries.</p>
+                <p>The Axiomra Tracking System is designed with strict privacy boundaries.</p>
                 <div className="security-grid">
                   <div className="security-item">
                     <h4>Shift-Bound Tracking</h4>

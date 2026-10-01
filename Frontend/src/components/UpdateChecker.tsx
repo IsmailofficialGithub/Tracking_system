@@ -121,7 +121,7 @@ export function UpdateChecker() {
     if ((window as any).electronAPI?.startUpdateDownload) {
       setIsDownloading(true);
       const tagName = `v${updateInfo.version}-build${updateInfo.build_number}`;
-      const rawExeName = `Exiomra Tracking System Setup ${updateInfo.version}.exe`;
+      const rawExeName = `Axiomra Tracking System Setup ${updateInfo.version}.exe`;
       const exeName = rawExeName.replace(/ /g, '.');
       const downloadUrl = `${updateInfo.githubRepoUrl}/releases/download/${tagName}/${encodeURIComponent(exeName)}`;
       (window as any).electronAPI.startUpdateDownload(downloadUrl);

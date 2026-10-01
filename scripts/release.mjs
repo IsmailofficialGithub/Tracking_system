@@ -142,8 +142,8 @@ async function main() {
   // Publish Release
   console.log('\nPublishing GitHub Release...');
   const tagName = `v${newVersion}-build${newBuild}`;
-  const releaseTitle = `Exiomra Tracking System ${newVersion} (Build ${newBuild})`;
-  const productName = packageData.build?.productName || 'Exiomra Tracking System';
+  const releaseTitle = `Axiomra Tracking System ${newVersion} (Build ${newBuild})`;
+  const productName = packageData.build?.productName || 'Axiomra Tracking System';
   const exeFile = join(FRONTEND_DIR, 'release', `${productName} Setup ${newVersion}.exe`);
 
   let notes = "";

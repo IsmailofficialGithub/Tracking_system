@@ -129,7 +129,7 @@ app.whenReady().then(() => {
     const https = require('https');
     const { exec } = require('child_process');
     
-    const dest = path.join(app.getPath('temp'), 'ExiomraUpdate.exe');
+    const dest = path.join(app.getPath('temp'), 'AxiomraUpdate.exe');
     logEvent(`Downloading update from ${url} to ${dest}`);
 
     function downloadFile(fileUrl, fileDest) {
