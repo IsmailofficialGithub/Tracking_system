@@ -2,7 +2,7 @@
   "name": "frontend",
   "private": true,
   "version": "1.0.0",
-  "buildNumber": 6,
+  "buildNumber": 7,
   "type": "module",
   "main": "main.cjs",
   "scripts": {

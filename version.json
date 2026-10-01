@@ -1,12 +1,8 @@
 {
   "current_version": "1.0.0",
   "minimum_version": "1.0.0",
-  "build_number": 6,
-  "minimum_build_number": 6,
-  "features": [
-    "Update branding"
-  ],
-  "bug_fixes": [
-    "Fix Brand Name"
-  ]
+  "build_number": 7,
+  "minimum_build_number": 7,
+  "features": [],
+  "bug_fixes": []
 }
