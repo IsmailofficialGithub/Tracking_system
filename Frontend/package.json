@@ -2,7 +2,7 @@
   "name": "frontend",
   "private": true,
   "version": "1.0.0",
-  "buildNumber": 5,
+  "buildNumber": 6,
   "type": "module",
   "main": "main.cjs",
   "scripts": {
@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "com.ismailabbasi.chronotrack",
-    "productName": "Exiomra Tracking System",
+    "productName": "Axiomra Tracking System",
     "directories": {
       "output": "release"
     },
