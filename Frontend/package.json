@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "com.ismailabbasi.chronotrack",
-    "productName": "Axiomra Tracking System",
+    "productName": "Axiomra Attendance",
     "directories": {
       "output": "release"
     },

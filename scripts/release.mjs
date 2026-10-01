@@ -142,16 +142,24 @@ async function main() {
   // Publish Release
   console.log('\nPublishing GitHub Release...');
   const tagName = `v${newVersion}-build${newBuild}`;
-  const releaseTitle = `Axiomra Tracking System ${newVersion} (Build ${newBuild})`;
-  const productName = packageData.build?.productName || 'Axiomra Tracking System';
+  const releaseTitle = `Axiomra Attendance ${newVersion} (Build ${newBuild})`;
+  const productName = packageData.build?.productName || 'Axiomra Attendance';
   const exeFile = join(FRONTEND_DIR, 'release', `${productName} Setup ${newVersion}.exe`);
+  const legacyExeFile = join(FRONTEND_DIR, 'release', `Axiomra Tracking System Setup ${newVersion}.exe`);
+
+  // Create a copy for older clients that hardcoded the old name
+  try {
+    writeFileSync(legacyExeFile, readFileSync(exeFile));
+  } catch (err) {
+    console.log('Could not create legacy exe file for backward compatibility.');
+  }
 
   let notes = "";
   if (features.length > 0) notes += `### New Features\n- ${features.join('\n- ')}\n\n`;
   if (bug_fixes.length > 0) notes += `### Bug Fixes\n- ${bug_fixes.join('\n- ')}\n`;
   if (!notes) notes = "Minor updates and improvements.";
 
-  const ghCommand = `gh release create "${tagName}" "${exeFile}" --title "${releaseTitle}" --notes "${notes}"`;
+  const ghCommand = `gh release create "${tagName}" "${exeFile}" "${legacyExeFile}" --title "${releaseTitle}" --notes "${notes}"`;
 
   // Note: we run the gh command in the FRONTEND_DIR where the release/ folder is generated.
   try {

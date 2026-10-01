@@ -80,8 +80,8 @@ const DownloadTracker: React.FC = () => {
             <Download size={28} className="icon-gradient" />
           </div>
           <div className="header-text">
-            <h1>Tracker Distribution Center</h1>
-            <p>Deploy, manage, and download the Axiomra Employee Tracking agent.</p>
+            <h1>Attendance Distribution Center</h1>
+            <p>Deploy, manage, and download the Axiomra Attendance agent.</p>
           </div>
         </div>
       </div>
@@ -239,7 +239,7 @@ const DownloadTracker: React.FC = () => {
                   <Shield size={24} />
                 </div>
                 <h3>Security & Privacy Posture</h3>
-                <p>The Axiomra Tracking System is designed with strict privacy boundaries.</p>
+                <p>Axiomra Attendance is designed with strict privacy boundaries.</p>
                 <div className="security-grid">
                   <div className="security-item">
                     <h4>Shift-Bound Tracking</h4>
